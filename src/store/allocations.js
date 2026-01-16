@@ -423,8 +423,10 @@ export const useAllocationStore = defineStore('allocationStore', {
         let batch = new chainStore.getActiveChain.web3.BatchRequest();
         for(let i = y; i < max; i++){
           let allocation = this.getAllocations[i];
+          const issuer = allocation.isLegacy ? "0x00669A4CF01450B64E8A2A20E9b1FCB71E61eF03" : "0xb2Bb92d0DE618878E438b55D5846cfecD9301105";
+
           if(allocation.pendingRewards.loading && !allocation.pendingRewards.loaded){
-            batch.add(chainStore.getRewardsContract.methods.getRewards(allocation.id).call.request(function(error, value){
+            batch.add(chainStore.getRewardsContract.methods.getRewards(issuer, allocation.id).call.request(function(error, value){
               if(value != undefined){
                 allocation.pendingRewards.value = BigNumber(value);
                 allocation.pendingRewards.loaded = true;
@@ -444,12 +446,13 @@ export const useAllocationStore = defineStore('allocationStore', {
     },
     async fetchPendingRewards(allocationId){
       let allocation = this.getAllocations.find(e => e.id == allocationId);
+      const issuer = allocation.isLegacy ? "0x00669A4CF01450B64E8A2A20E9b1FCB71E61eF03" : "0xb2Bb92d0DE618878E438b55D5846cfecD9301105";
 
       if(!allocation.pendingRewards.loading && !allocation.pendingRewards.loaded){
 
         allocation.pendingRewards.loading = true;
 
-        chainStore.getRewardsContract.methods.getRewards(allocation.id).call(function(error, value){
+        chainStore.getRewardsContract.methods.getRewards(issuer, allocation.id).call(function(error, value){
           if(value != undefined){
             allocation.pendingRewards.value = BigNumber(value);
             allocation.pendingRewards.loaded = true;
