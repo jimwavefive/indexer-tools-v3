@@ -129,7 +129,7 @@ export const useAllocationStore = defineStore('allocationStore', {
       // Network Filter
       if(state.networkFilter.length) {
         allocations = allocations.filter((i) => {
-          return i.subgraphDeployment.manifest.network && state.networkFilter.includes(i.subgraphDeployment.manifest.network);
+          return i.subgraphDeployment.manifest?.network && state.networkFilter.includes(i.subgraphDeployment.manifest.network);
         });
       }
 
@@ -210,7 +210,7 @@ export const useAllocationStore = defineStore('allocationStore', {
       for(let i = 0; i < state.allocations.length; i++){
         const deploymentStatus = deploymentStatusStore.getDeploymentStatuses[state.allocations[i].subgraphDeployment.ipfsHash];
 
-        const validChain = accountStore.getPOIQueryStatus ? chainValidation.getChainStatus[state.allocations[i].subgraphDeployment.manifest.network] : null;
+        const validChain = accountStore.getPOIQueryStatus ? chainValidation.getChainStatus[state.allocations[i].subgraphDeployment.manifest?.network] : null;
         const synced = epochStore.getBlockNumbers[state.allocations[i].subgraphDeployment.manifest?.network] <= deploymentStatus?.chains?.[0]?.latestBlock?.number;
         const deterministicFailure = synced ? null : deploymentStatus?.health == 'failed' && deploymentStatus?.fatalError && deploymentStatus?.fatalError?.deterministic == true;
 
