@@ -133,8 +133,9 @@ export const useSubgraphsStore = defineStore({
       }
 
       if(subgraphSettingStore.settings.activateBlacklist) {
+        const blacklist = subgraphSettingStore.combinedBlacklist;
         subgraphs = subgraphs.filter((i) => {
-          return !subgraphSettingStore.settings.subgraphBlacklist.includes(i.deployment.ipfsHash);
+          return !blacklist.includes(i.deployment.ipfsHash);
         });
       }
 

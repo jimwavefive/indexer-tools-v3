@@ -86,3 +86,25 @@ Override default RPC for Arbitrum Sepolia. Used for querying pending rewards.
 ```
 DEFAULT_RPC_ARBITRUM_SEPOLIA="https://arbitrum-sepolia.infura.io/v3/db92de7c459f4d83a2c2c21931a6bdf0"
 ```
+
+### CHAIN_VALIDATION_RPCS
+#### Description
+JSON object mapping chain names to custom RPC URLs for block hash verification. Replaces the default DRPC provider for the specified chains. UI settings (localStorage) take priority over this variable.
+
+Supported chain names: `mainnet`, `arbitrum-one`, `matic`, `gnosis`, `base`, `sepolia`, `arbitrum-sepolia`
+#### Example
+```
+CHAIN_VALIDATION_RPCS='{"mainnet":"https://eth.erpc.example.com","arbitrum-one":"https://arb.erpc.example.com","matic":"https://polygon.erpc.example.com"}'
+```
+
+## Volume Mounts
+
+### blacklist.txt
+#### Description
+A text file containing subgraph deployment IPFS hashes to blacklist, one per line. Lines starting with `#` are treated as comments. Mount to both `/app/config/blacklist.txt` (used by entrypoint for dev mode) and `/app/dist/blacklist.txt` (served directly to the browser). The `/app/dist/` mount enables live updates without container restarts.
+#### Example
+```yaml
+volumes:
+  - ./blacklist.txt:/app/config/blacklist.txt
+  - ./blacklist.txt:/app/dist/blacklist.txt
+```

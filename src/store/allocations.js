@@ -63,8 +63,9 @@ export const useAllocationStore = defineStore('allocationStore', {
 
       // Blacklist Filter
       if(state.activateBlacklist) {
+        const blacklist = subgraphSettingStore.combinedBlacklist;
         allocations = allocations.filter((i) => {
-          return !subgraphSettingStore.settings.subgraphBlacklist.includes(i.subgraphDeployment.ipfsHash);
+          return !blacklist.includes(i.subgraphDeployment.ipfsHash);
         });
       }
 
