@@ -48,6 +48,7 @@ export const loadDefaultsConfig = async () => {
         eboArbitrumSepolia: value.DEFAULT_SUBGRAPH_ARBITRUM_SEPOLIA || import.meta.env.VITE_DEFAULT_SUBGRAPH_EBO_ARBITRUM_SEPOLIA || "https://gateway.thegraph.com/api/[api-key]/subgraphs/id/BhnsdeZihU4SuokxZMLF4FQBVJ3jgtZf6v51gHvz3bSS",
         qosSubgraph: value.DEFAULT_QOS_SUBGRAPH || import.meta.env.VITE_DEFAULT_QOS_SUBGRAPH || "https://gateway.thegraph.com/api/[api-key]/subgraphs/id/Dtr9rETvwokot4BSXaD5tECanXfqfJKcvHuaaEgPDD2D",
         apiKey: value.GRAPH_API_KEY || import.meta.env.VITE_GRAPH_API_KEY || "3bab348a7c385b1870039eb890fd0a5f",
+        chainValidationRpcs: value.CHAIN_VALIDATION_RPCS || (import.meta.env.VITE_CHAIN_VALIDATION_RPCS ? JSON.parse(import.meta.env.VITE_CHAIN_VALIDATION_RPCS) : {}),
       }
     }    
     

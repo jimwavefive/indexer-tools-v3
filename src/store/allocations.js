@@ -3,8 +3,8 @@ import { useNetworkStore } from '@/store/network';
 import { useAccountStore } from '@/store/accounts';
 import { useChainStore } from '@/store/chains';
 import { useDeploymentStatusStore } from './deploymentStatuses';
+import { useNotificationStore } from './notifications';
 import gql from 'graphql-tag';
-import moment from 'moment';
 import BigNumber from 'bignumber.js';
 import { storeToRefs } from 'pinia';
 import { calculateApr, calculateReadableDuration, calculateAllocationDailyRewards, indexerCut } from '@/plugins/commonCalcs';
@@ -13,6 +13,7 @@ import { useQosStore } from './qos';
 import { useQueryFeesStore } from './queryFees';
 import { useChainValidationStore } from './chainValidation';
 import { useEpochStore } from './epochStore';
+import { applyStatusFilter } from '@/plugins/statusFilters';
 
 const networkStore = useNetworkStore();
 const accountStore = useAccountStore();
@@ -23,6 +24,7 @@ const qosStore = useQosStore();
 const queryFeeStore = useQueryFeesStore();
 const chainValidation = useChainValidationStore();
 const epochStore = useEpochStore();
+const notificationStore = useNotificationStore();
 
 networkStore.init();
 accountStore.fetchData()
@@ -52,65 +54,12 @@ export const useAllocationStore = defineStore('allocationStore', {
     getFilteredAllocations: (state) => {
       let allocations = state.getAllocations;
       
-      if(subgraphSettingStore.settings.statusFilter == 'all'){
-        allocations = allocations.filter((i) => {
-          return deploymentStatusStore.getDeploymentStatuses[i.subgraphDeployment.ipfsHash] != undefined;
-        });
-      }
-
-      if(subgraphSettingStore.settings.statusFilter == 'closable'){
-        allocations = allocations.filter((i) => {
-          const status = deploymentStatusStore.getDeploymentStatuses[i.subgraphDeployment.ipfsHash];
-          if(status != undefined && status.synced == true && (status.fatalError == undefined || status.fatalError.deterministic == true))
-            return true
-          return false;
-        });
-      }
-
-      if(subgraphSettingStore.settings.statusFilter == 'healthy-synced'){
-        allocations = allocations.filter((i) => {
-          const status = deploymentStatusStore.getDeploymentStatuses[i.subgraphDeployment.ipfsHash];
-          if(status != undefined && status.health == 'healthy' && status.synced == true)
-            return true
-          return false;
-        });
-      }
-
-      if(subgraphSettingStore.settings.statusFilter == 'syncing'){
-        allocations = allocations.filter((i) => {
-          const status = deploymentStatusStore.getDeploymentStatuses[i.subgraphDeployment.ipfsHash];
-          if(status != undefined && status.health == 'healthy' && status.synced == false)
-            return true
-          return false;
-        });
-      }
-
-      if(subgraphSettingStore.settings.statusFilter == 'failed'){
-        allocations = allocations.filter((i) => {
-          const status = deploymentStatusStore.getDeploymentStatuses[i.subgraphDeployment.ipfsHash];
-          if(status != undefined && status.health == 'failed')
-            return true
-          return false;
-        });
-      }
-
-      if(subgraphSettingStore.settings.statusFilter == 'non-deterministic'){
-        allocations = allocations.filter((i) => {
-          const status = deploymentStatusStore.getDeploymentStatuses[i.subgraphDeployment.ipfsHash];
-          if(status != undefined && status.health == 'failed' && status.fatalError != undefined && status.fatalError.deterministic == false)
-            return true
-          return false;
-        });
-      }
-
-      if(subgraphSettingStore.settings.statusFilter == 'deterministic'){
-        allocations = allocations.filter((i) => {
-          const status = deploymentStatusStore.getDeploymentStatuses[i.subgraphDeployment.ipfsHash];
-          if(status != undefined && status.health == 'failed' && status.fatalError != undefined && status.fatalError.deterministic == true)
-            return true
-          return false;
-        });
-      }
+      allocations = applyStatusFilter(
+        allocations,
+        subgraphSettingStore.settings.statusFilter,
+        deploymentStatusStore.getDeploymentStatuses,
+        (i) => i.subgraphDeployment.ipfsHash
+      );
 
       // Blacklist Filter
       if(state.activateBlacklist) {
@@ -167,8 +116,6 @@ export const useAllocationStore = defineStore('allocationStore', {
           ...state.getStatusChecks[i],
         };
       }
-      console.log(state.allocations);
-      console.log(allocations);
       return allocations;
     },
     getSelectedAllocations: (state) => {
@@ -232,7 +179,7 @@ export const useAllocationStore = defineStore('allocationStore', {
       let activeDurations = [];
       for(let i = 0; i < state.allocations.length; i++){
         let allocation = state.allocations[i];
-        activeDurations[i] = { activeDuration: moment().unix() - allocation.createdAt }
+        activeDurations[i] = { activeDuration: Math.floor(Date.now() / 1000) - allocation.createdAt }
       }
       return activeDurations;
     },
@@ -399,8 +346,6 @@ export const useAllocationStore = defineStore('allocationStore', {
       return state.getAllocations.reduce((sum, cur) => cur.pendingRewardsCut && !cur.subgraphDeployment.deniedAt ? sum.plus(cur.pendingRewardsCut): sum, new BigNumber(0));
     },
     pendingRewardsSum: (state) => {
-      console.log("PENDING REWARDS");
-      console.log(state.getPendingRewards);
       return state.getAllocations.reduce((sum, cur) => cur.pendingRewards.loaded && !cur.subgraphDeployment.deniedAt ? sum.plus(cur.pendingRewards.value) : sum, new BigNumber(0));
     },
     dailyRewardsCutSum: (state) => {
@@ -472,7 +417,6 @@ export const useAllocationStore = defineStore('allocationStore', {
       const fetch = networkStore.init().then(() => {
         this.fetch(0)
         .then((data) => {
-          console.log(data);
           this.allocations = data.allocations;
           this.pendingRewards = Array(data.allocations.length).fill();
           for(let i = 0; i < this.pendingRewards.length; i++){
@@ -490,7 +434,6 @@ export const useAllocationStore = defineStore('allocationStore', {
     },
     async fetch(skip){
       this.selected = [];
-      console.log("Fetch " + skip);
       return chainStore.getNetworkSubgraphClient.query({
         query: gql`query allocations($indexer: String!, $skip: Int!){
           allocations(first: 1000, where: {activeForIndexer_contains_nocase: $indexer, status: Active}, orderBy:createdAtBlockNumber, orderDirection:desc, skip: $skip){
@@ -539,12 +482,10 @@ export const useAllocationStore = defineStore('allocationStore', {
         },
       })
       .then(({ data, networkStatus }) => {
-        console.log(data);
         if(networkStatus == 7 && data.allocations.length == 1000){
           return this.fetch(skip + data.allocations.length)
           .then((data1) => {
             let concatData = {};
-            console.log(data1);
             if(typeof data.allocations == "object" && typeof data1.allocations == "object")
               concatData.allocations = data.allocations.concat(data1.allocations);
             
@@ -557,14 +498,14 @@ export const useAllocationStore = defineStore('allocationStore', {
         if(err.graphQLErrors[0]?.message){
           console.error(`Allocations API error: ${err.graphQLErrors[0].message}`)
           if(!this.error){
-            alert(`Allocations API Error: ${err.graphQLErrors[0].message}`);
+            notificationStore.error(`Allocations API Error: ${err.graphQLErrors[0].message}`);
             this.error = true
           }
         }
         if(err.message){
           console.error(`Allocations query error: ${err.message}`);
           if(!this.error){
-            alert(`Allocations Error: ${err.message}`);
+            notificationStore.error(`Allocations Error: ${err.message}`);
             this.error = true
           }
         }

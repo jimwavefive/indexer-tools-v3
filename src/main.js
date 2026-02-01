@@ -16,7 +16,6 @@ import { registerPlugins } from '@/plugins'
 import { loadDefaultsConfig, defaultsConfig } from "@/plugins/defaultsConfig";
 
 const defaultConfigOptions = await loadDefaultsConfig();
-console.log(defaultConfigOptions);
 
 const app = createApp(App)
 

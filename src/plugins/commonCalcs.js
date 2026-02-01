@@ -1,5 +1,5 @@
 import BigNumber from "bignumber.js";
-import Web3 from "web3";
+import { toWei } from "@/plugins/web3Utils";
 
 BigNumber.config({ POW_PRECISION: 1000 });
 
@@ -33,7 +33,7 @@ function calculateNewApr(currentSignalledTokens, stakedTokens, networkStore, new
           .dividedBy(networkStore.getTotalTokensSignalled)
           .multipliedBy(networkStore.getIssuancePerYear)
           .dividedBy(
-              new BigNumber(stakedTokens).plus(Web3.utils.toWei(newAllocation))
+              new BigNumber(stakedTokens).plus(toWei(newAllocation))
           ).multipliedBy(100);
   }
   catch(e){
@@ -70,7 +70,7 @@ function calculateSubgraphDailyRewards(currentSignalledTokens, stakedTokens, net
         .multipliedBy(networkStore.getIssuancePerBlock)
         .multipliedBy(6450)
         .multipliedBy(
-            new BigNumber(Web3.utils.toWei(newAllocation)).dividedBy(new BigNumber(stakedTokens).plus(Web3.utils.toWei(newAllocation)))
+            new BigNumber(toWei(newAllocation)).dividedBy(new BigNumber(stakedTokens).plus(toWei(newAllocation)))
         ).dp(0);
   }
   catch(e){
@@ -88,12 +88,7 @@ function calculateReadableDuration(seconds) {
 }
 
 function indexerCut(rewards, rewardCut){
-  console.log(rewards);
-  console.log(rewardCut);
   let afterCut = new BigNumber(rewards).multipliedBy(rewardCut).dividedBy(1000000).dp(0,1);
-  console.log(afterCut);
-  console.log(afterCut.toString());
-  console.log();
   return afterCut;
 }
 

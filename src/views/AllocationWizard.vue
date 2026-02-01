@@ -60,7 +60,7 @@
         <v-card>
           <v-card-text>
               Allocation Remaining:
-              <h1 class="pt-2">{{ numeral(Web3.utils.fromWei(Web3.utils.toBN(newAllocationSetterStore.calculatedAvailableStake))).format('0,0') }}</h1>
+              <h1 class="pt-2">{{ numeral(fromWei(toBN(newAllocationSetterStore.calculatedAvailableStake))).format('0,0') }}</h1>
           </v-card-text>
         </v-card>
 
@@ -92,7 +92,7 @@
 
 <script setup>
 import numeral from "numeral";
-import Web3 from "web3";
+import { fromWei, toBN } from '@/plugins/web3Utils';
 import BigNumber from "bignumber.js";
 import AllocationsDashboard from "./AllocationsDashboard.vue";
 import SubgraphsDashboard from "./SubgraphsDashboard.vue";
