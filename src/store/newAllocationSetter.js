@@ -5,7 +5,7 @@ import { useAccountStore } from './accounts';
 import { useAllocationStore } from './allocations';
 import BigNumber from 'bignumber.js';
 import { toWei } from '@/plugins/web3Utils';
-import { calculateNewApr, calculateSubgraphDailyRewards, maxAllo, indexerCut } from '@/plugins/commonCalcs';
+import { calculateNewApr, calculateSubgraphDailyRewards, maxAllo, indexerCut, calculateAutoTargetApr } from '@/plugins/commonCalcs';
 import { useChainStore } from './chains';
 const subgraphStore = useSubgraphsStore();
 const networkStore = useNetworkStore();
@@ -22,6 +22,7 @@ export const useNewAllocationSetterStore = defineStore('allocationSetter', {
     customPOIs: {},
     customBlockHeights: {},
     customPublicPOIs: {},
+    reserveGRT: '1',
   }),
   getters: {
     getSelected: () => subgraphStore.selected,
@@ -174,6 +175,16 @@ export const useNewAllocationSetterStore = defineStore('allocationSetter', {
       let simulatedTotalRewardsPerYear = allocationStore.totalRewardsPerYear.minus(allocationStore.calculatedClosingRewardsPerYear).plus(state.calculatedOpeningRewardsPerYear);
 
       return simulatedTotalRewardsPerYear.dividedBy(simulatedTotalStake);
+    },
+    calculatedAutoTargetApr: (state) => {
+      return calculateAutoTargetApr(
+        state.getSelectedS,
+        state.getFutureStakedTokens,
+        networkStore,
+        accountStore.availableStake,
+        allocationStore.calculatedClosingStake,
+        state.reserveGRT
+      );
     },
     calculatedSelectedMaxAllos: (state) => {
       let selectedMaxAllos = new BigNumber(0);

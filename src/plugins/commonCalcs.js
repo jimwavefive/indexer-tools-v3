@@ -92,4 +92,33 @@ function indexerCut(rewards, rewardCut){
   return afterCut;
 }
 
-export { maxAllo, calculateApr, calculateNewApr, calculateAllocationDailyRewards, calculateSubgraphDailyRewards, calculateReadableDuration, indexerCut };
+function calculateAutoTargetApr(selectedSubgraphs, futureStakedTokens, networkStore, availableStakeWei, closingStakeWei, reserveGRT = '1') {
+  let totalSignalProportion = new BigNumber(0);
+  let totalFutureStaked = new BigNumber(0);
+
+  for (let i = 0; i < selectedSubgraphs.length; i++) {
+    const sub = selectedSubgraphs[i];
+    if (sub.deployment.deniedAt || sub.deployment.signalledTokens == 0) continue;
+    totalSignalProportion = totalSignalProportion.plus(
+      new BigNumber(sub.deployment.signalledTokens).dividedBy(networkStore.getTotalTokensSignalled)
+    );
+    totalFutureStaked = totalFutureStaked.plus(futureStakedTokens[i].futureStakedTokens);
+  }
+
+  if (totalSignalProportion.isZero()) return new BigNumber(0);
+
+  const reserveWei = new BigNumber(reserveGRT).multipliedBy(new BigNumber(10).pow(18));
+  const denominator = new BigNumber(availableStakeWei)
+    .plus(closingStakeWei)
+    .minus(reserveWei)
+    .plus(totalFutureStaked);
+
+  if (denominator.isLessThanOrEqualTo(0)) return new BigNumber(0);
+
+  return new BigNumber(100)
+    .multipliedBy(networkStore.getIssuancePerYear)
+    .multipliedBy(totalSignalProportion)
+    .dividedBy(denominator);
+}
+
+export { maxAllo, calculateApr, calculateNewApr, calculateAllocationDailyRewards, calculateSubgraphDailyRewards, calculateReadableDuration, indexerCut, calculateAutoTargetApr };
