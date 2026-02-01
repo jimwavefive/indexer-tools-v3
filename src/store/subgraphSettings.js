@@ -86,6 +86,7 @@ const settingsDefault = {
 export const useSubgraphSettingStore = defineStore('subgraphSetting', {
   state: () => ({
     settings: localStorage.subgraphSettings ? Object.assign({}, settingsDefault, JSON.parse(localStorage.subgraphSettings)) : Object.assign({}, settingsDefault),
+    fileBlacklist: [],
   }),
   getters: {
     search: (state) => state.settings.search,
@@ -102,6 +103,12 @@ export const useSubgraphSettingStore = defineStore('subgraphSetting', {
     subgraphSynclist: (state) => state.settings.subgraphSynclist,
     networks: (state) => state.settings.networks,
     newAprCalc: (state) => state.settings?.selectedSubgraphColumns?.find((i) => i.key == 'newApr'),
+    combinedBlacklist: (state) => {
+      const manual = state.settings.subgraphBlacklist
+        ? state.settings.subgraphBlacklist.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
+        : [];
+      return [...new Set([...state.fileBlacklist, ...manual])];
+    },
   },
   actions: {
     moveItemInArray(array, from, to) {
@@ -119,6 +126,9 @@ export const useSubgraphSettingStore = defineStore('subgraphSetting', {
     },
     async resetSubgraphDefaultColumns(){
       this.settings.selectedSubgraphColumns = settingsDefault.selectedSubgraphColumns.slice();
+    },
+    setFileBlacklist(entries) {
+      this.fileBlacklist = entries;
     },
   }
 })
