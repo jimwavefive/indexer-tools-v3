@@ -143,6 +143,10 @@
           <v-checkbox v-model="subgraphSettingStore.settings.hideCurrentlyAllocated"
             label="Hide Currently Allocated" density="compact" hide-details></v-checkbox>
         </v-col>
+        <v-col cols="auto">
+          <v-checkbox v-model="subgraphSettingStore.settings.hideZeroApr"
+            label="Hide 0% APR" density="compact" hide-details></v-checkbox>
+        </v-col>
       </v-row>
     </template>
     <template v-slot:item.deploymentStatus.blocksBehindChainhead="{ item }">
@@ -245,16 +249,25 @@
   const tableSettingsStore = useTableSettingStore();
   const newAllocationSetterStore = useNewAllocationSetterStore();
   const autoTargetApr = ref(false);
+  const previousTargetApr = ref(null);
   subgraphStore.fetchData();
 
   function onAutoTargetAprToggle(enabled) {
-    if (enabled) applyAutoTargetApr();
+    if (enabled) {
+      previousTargetApr.value = subgraphSettingStore.settings.targetApr;
+      applyAutoTargetApr();
+    } else {
+      if (previousTargetApr.value !== null) {
+        subgraphSettingStore.settings.targetApr = previousTargetApr.value;
+      }
+      newAllocationSetterStore.resetAllos();
+    }
   }
 
   function applyAutoTargetApr() {
     const apr = newAllocationSetterStore.calculatedAutoTargetApr;
     if (apr.isGreaterThan(0)) {
-      subgraphSettingStore.settings.targetApr = apr.toFixed(2);
+      subgraphSettingStore.settings.targetApr = apr.toFixed(10);
       newAllocationSetterStore.setAllMaxAllos();
     }
   }
@@ -284,6 +297,7 @@
     subgraphSettingStore.settings.activateBlacklist = false;
     subgraphSettingStore.settings.activateSynclist = false;
     subgraphSettingStore.settings.hideCurrentlyAllocated = false;
+    subgraphSettingStore.settings.hideZeroApr = false;
   }
 
   function exportSubgraphs() {

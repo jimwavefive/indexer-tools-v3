@@ -169,6 +169,10 @@ export const useSubgraphsStore = defineStore({
         });
       }
 
+      if(subgraphSettingStore.settings.hideZeroApr){
+        subgraphs = subgraphs.filter((i) => i.apr > 0);
+      }
+
       return subgraphs;
     },
     getSubgraphs: (state) => {
