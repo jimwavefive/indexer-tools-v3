@@ -6,13 +6,13 @@
       :items="['Close Allocations', 'Set Custom POIs', 'Pick Subgraphs', 'Set Allocations', 'Execute Allocations']"
     >
       <template v-slot:item.1>
-        <AllocationsDashboard selectable />
+        <AllocationsDashboard selectable :default-items-per-page="50" />
       </template>
       <template v-slot:item.2>
         <CustomPoiSetter></CustomPoiSetter>
       </template>
       <template v-slot:item.3>
-        <SubgraphsDashboard selectable />
+        <SubgraphsDashboard selectable :default-items-per-page="50" />
       </template>
       <template v-slot:item.4>
         <AllocationSetter />        

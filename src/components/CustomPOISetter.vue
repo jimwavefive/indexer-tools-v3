@@ -8,7 +8,8 @@
       mobile-breakpoint="0"
       v-model:sort-by="tableSettingsStore.allocationSettings.sortBy"
       v-model:loading="allocationStore.loading"
-      v-model:items-per-page="tableSettingsStore.allocationSettings.itemsPerPage"
+      v-model:items-per-page="poiItemsPerPage"
+      v-model:page="poiPage"
       hover
       show-expand
       :expanded="allocationStore.selected"
@@ -57,6 +58,11 @@
           class="d-inline-block"
         ></v-checkbox>
       </div>
+      <TopPagination
+        v-model:items-per-page="poiItemsPerPage"
+        v-model:page="poiPage"
+        :total-items="allocationStore.getSelectedFilteredAllocations.length"
+      />
     </template>
     <template v-slot:item.deploymentStatus.blocksBehindChainhead="{ item }">
       <v-menu
@@ -340,6 +346,7 @@ import { useSubgraphSettingStore } from "@/store/subgraphSettings";
 import { useChainStore } from "@/store/chains";
 import { useTableSettingStore } from "@/store/tableSettings";
 import { useNewAllocationSetterStore } from "@/store/newAllocationSetter";
+import TopPagination from "@/components/TopPagination.vue";
 
 const allocationStore = useAllocationStore();
 const accountStore = useAccountStore();
@@ -349,6 +356,8 @@ const newAllocationSetterStore = useNewAllocationSetterStore();
 const chainStore = useChainStore();
 const { getActiveAccount } = storeToRefs(accountStore);
 
+const poiPage = ref(1);
+const poiItemsPerPage = ref(50);
 const { selected, loaded } = storeToRefs(allocationStore);
 
 const { customPOIs, customPublicPOIs, customBlockHeights } = storeToRefs(newAllocationSetterStore);
