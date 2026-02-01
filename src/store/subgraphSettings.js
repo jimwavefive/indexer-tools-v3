@@ -23,6 +23,7 @@ const settingsDefault = {
   },
   chainValidationRpcs: {},
   hideCurrentlyAllocated: false,
+  hideZeroApr: false,
   queryFilters: {
     minSignal: '',
     networkFilter: [],
