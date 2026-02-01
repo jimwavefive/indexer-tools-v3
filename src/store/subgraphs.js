@@ -114,99 +114,212 @@ export const useSubgraphsStore = defineStore({
       return state.loading || deploymentStatusStore.loading || queryFeeStore.loading;
     },
     getFilteredSubgraphs: (state) => {
-      let subgraphs = state.getSubgraphs;
-      
-      if(subgraphSettingStore.settings.noRewardsFilter === 0){
-        subgraphs = subgraphs.filter((i) => {
-          return !i.deployment.deniedAt;
-        });
-      } else if(subgraphSettingStore.settings.noRewardsFilter === 2){
-        subgraphs = subgraphs.filter((i) => {
-          return i.deployment.deniedAt;
-        });
-      }
+      const subgraphs = state.getSubgraphs;
+      const settings = subgraphSettingStore.settings;
 
-      if(subgraphSettingStore.settings.networkFilter.length) {
-        subgraphs = subgraphs.filter((i) => {
-          return i.deployment.manifest.network && subgraphSettingStore.settings.networkFilter.includes(i.deployment.manifest.network);
-        });
-      }
+      // Pre-compute all filter parameters once
+      const noRewardsFilter = settings.noRewardsFilter;
+      const networkFilterArr = settings.networkFilter;
+      const hasNetworkFilter = networkFilterArr.length > 0;
+      const networkFilterSet = hasNetworkFilter ? new Set(networkFilterArr) : null;
 
-      if(subgraphSettingStore.settings.activateBlacklist) {
-        const blacklist = subgraphSettingStore.combinedBlacklist;
-        subgraphs = subgraphs.filter((i) => {
-          return !blacklist.includes(i.deployment.ipfsHash);
-        });
-      }
+      const useBlacklist = settings.activateBlacklist;
+      const blacklistSet = useBlacklist ? new Set(subgraphSettingStore.combinedBlacklist) : null;
 
-      if(subgraphSettingStore.settings.activateSynclist) {
-        subgraphs = subgraphs.filter((i) => {
-          return subgraphSettingStore.settings.subgraphSynclist.includes(i.deployment.ipfsHash);
-        });
-      }
+      const useSynclist = settings.activateSynclist;
+      const synclistSet = useSynclist ? new Set(
+        Array.isArray(settings.subgraphSynclist)
+          ? settings.subgraphSynclist
+          : (settings.subgraphSynclist || '').split('\n').map(l => l.trim()).filter(Boolean)
+      ) : null;
 
-      if(parseInt(subgraphSettingStore.settings.maxSignal)){
-        subgraphs = subgraphs.filter((i) => {
-          return BigNumber(i.deployment.signalledTokens).isLessThanOrEqualTo(new BigNumber(toWei(subgraphSettingStore.settings.maxSignal)));
-        });
-      }
+      const maxSignalRaw = parseInt(settings.maxSignal);
+      const maxSignalWei = maxSignalRaw ? new BigNumber(toWei(settings.maxSignal)) : null;
+      const minSignalRaw = parseInt(settings.minSignal);
+      const minSignalWei = minSignalRaw ? new BigNumber(toWei(settings.minSignal)) : null;
 
-      if(parseInt(subgraphSettingStore.settings.minSignal)){
-        subgraphs = subgraphs.filter((i) => {
-          return BigNumber(i.deployment.signalledTokens).isGreaterThanOrEqualTo(new BigNumber(toWei(subgraphSettingStore.settings.minSignal)));
-        });
-      }
+      const statusFilter = settings.statusFilter;
+      const useStatusFilter = statusFilter !== 'none';
+      const depStatuses = useStatusFilter ? deploymentStatusStore.getDeploymentStatuses : null;
 
-      subgraphs = applyStatusFilter(
-        subgraphs,
-        subgraphSettingStore.settings.statusFilter,
-        deploymentStatusStore.getDeploymentStatuses,
-        (i) => i.deployment.ipfsHash
-      );
+      const hideAllocated = settings.hideCurrentlyAllocated === true;
+      const hideZeroApr = settings.hideZeroApr;
 
-      if(subgraphSettingStore.settings.hideCurrentlyAllocated == true){
-        subgraphs = subgraphs.filter((i) => {
-          return !i.currentlyAllocated;
-        });
-      }
+      // Single-pass filter
+      return subgraphs.filter((item) => {
+        // Denied filter
+        if (noRewardsFilter === 0 && item.deployment.deniedAt) return false;
+        if (noRewardsFilter === 2 && !item.deployment.deniedAt) return false;
 
-      if(subgraphSettingStore.settings.hideZeroApr){
-        subgraphs = subgraphs.filter((i) => i.apr > 0);
-      }
+        // Network filter
+        if (hasNetworkFilter) {
+          if (!item.deployment.manifest.network || !networkFilterSet.has(item.deployment.manifest.network)) return false;
+        }
 
-      return subgraphs;
+        const ipfsHash = item.deployment.ipfsHash;
+
+        // Blacklist
+        if (useBlacklist && blacklistSet.has(ipfsHash)) return false;
+
+        // Synclist
+        if (useSynclist && !synclistSet.has(ipfsHash)) return false;
+
+        // Max signal
+        if (maxSignalWei && !BigNumber(item.deployment.signalledTokens).isLessThanOrEqualTo(maxSignalWei)) return false;
+
+        // Min signal
+        if (minSignalWei && !BigNumber(item.deployment.signalledTokens).isGreaterThanOrEqualTo(minSignalWei)) return false;
+
+        // Status filter (inline the logic to avoid function call overhead per item)
+        if (useStatusFilter) {
+          const status = depStatuses[ipfsHash];
+          switch (statusFilter) {
+            case 'all':
+              if (status == undefined) return false; break;
+            case 'closable':
+              if (!(status != undefined && status.synced === true && (status.fatalError == undefined || status.fatalError.deterministic === true))) return false; break;
+            case 'healthy-synced':
+              if (!(status != undefined && status.health === 'healthy' && status.synced === true)) return false; break;
+            case 'syncing':
+              if (!(status != undefined && status.health === 'healthy' && status.synced === false)) return false; break;
+            case 'failed':
+              if (!(status != undefined && status.health === 'failed')) return false; break;
+            case 'non-deterministic':
+              if (!(status != undefined && status.health === 'failed' && status.fatalError != undefined && status.fatalError.deterministic === false)) return false; break;
+            case 'deterministic':
+              if (!(status != undefined && status.health === 'failed' && status.fatalError != undefined && status.fatalError.deterministic === true)) return false; break;
+          }
+        }
+
+        // Hide currently allocated
+        if (hideAllocated && item.currentlyAllocated) return false;
+
+        // Hide zero APR
+        if (hideZeroApr && item.apr <= 0) return false;
+
+        return true;
+      });
     },
     getSubgraphs: (state) => {
-      let subgraphs = [];
-      for(let i = 0; i < state.subgraphs.length; i++){
+      const len = state.subgraphs.length;
+      if (len === 0) return [];
+
+      // Pre-build Maps for O(1) lookups
+      const alloMap = new Map();
+      for (const a of allocationStore.getAllocations) {
+        alloMap.set(a.subgraphDeployment.ipfsHash, a);
+      }
+      const selectedAlloMap = new Map();
+      for (const a of allocationStore.getSelectedAllocations) {
+        selectedAlloMap.set(a.subgraphDeployment.ipfsHash, a);
+      }
+
+      // Pre-compute constants
+      const totalSignalled = networkStore.getTotalTokensSignalled;
+      const totalAllocated = networkStore.getTotalTokensAllocated;
+      const newAprCalc = subgraphSettingStore.newAprCalc;
+      const newAllocation = subgraphSettingStore.settings.newAllocation;
+      const newAllocationWei = newAprCalc ? toWei(newAllocation) : null;
+      const targetApr = subgraphSettingStore.settings.targetApr;
+      const accountLoading = accountStore.loading;
+      const cut = accountStore.cut;
+      const depStatuses = deploymentStatusStore.getDeploymentStatuses;
+      const blankStatus = deploymentStatusStore.getBlankStatus;
+      const queryFeeDict = queryFeeStore.getQueryFeeDict;
+      const depEntities = deploymentStatusStore.getDeploymentEntities;
+
+      const subgraphs = new Array(len);
+      for (let i = 0; i < len; i++) {
+        const sub = state.subgraphs[i];
+        const ipfsHash = sub.deployment.ipfsHash;
+        const signalled = sub.deployment.signalledTokens;
+        const staked = sub.deployment.stakedTokens;
+
+        // Proportion
+        const proportion = staked > 0
+          ? (signalled / totalSignalled) / (staked / totalAllocated)
+          : 0;
+
+        // APR
+        const apr = signalled > 0
+          ? calculateNewApr(signalled, staked, networkStore, "0", "0")
+          : 0;
+
+        // Future staked tokens (accounting for closing allocations)
+        const closingAllo = selectedAlloMap.get(ipfsHash);
+        const futureStaked = closingAllo
+          ? new BigNumber(staked).minus(closingAllo.allocatedTokens)
+          : new BigNumber(staked);
+
+        // New APR
+        const newApr = newAprCalc && signalled > 0
+          ? calculateNewApr(signalled, futureStaked, networkStore, newAllocation, newAllocationWei)
+          : 0;
+
+        // Daily rewards
+        const dailyRewards = signalled > 0
+          ? calculateSubgraphDailyRewards(signalled, futureStaked, networkStore, newAllocation, newAllocationWei)
+          : 0;
+
+        // Daily rewards cut
+        const dailyRewardsCut = staked > 0 && !accountLoading
+          ? indexerCut(dailyRewards, cut)
+          : 0;
+
+        // Max allocation
+        const maxAlloVal = signalled > 0
+          ? maxAllo(targetApr, signalled, networkStore, futureStaked)
+          : Number.MIN_SAFE_INTEGER;
+
+        // Currently allocated (allocated but not selected for closing)
+        const hasAllo = alloMap.has(ipfsHash);
+        const hasUnallo = selectedAlloMap.has(ipfsHash);
+        const currentlyAllocated = hasAllo && !hasUnallo;
+
+        // Deployment status
+        const deploymentStatus = depStatuses[ipfsHash] || blankStatus;
+
+        // Query fees
+        const queryFees = queryFeeDict[ipfsHash];
+
+        // Num entities
+        const numEntities = depEntities[ipfsHash] || null;
+
+        // Upgrade indexer
+        const upgradeIndexerVal = state.upgradeIndexer[i];
+
         subgraphs[i] = {
-          ...state.subgraphs[i],
-          ...state.getProportions[i],
-          ...state.getAprs[i],
-          ...state.getDailyRewards[i],
-          ...state.getDailyRewardsCuts[i],
-          ...state.getNewAprs[i],
-          ...state.getMaxAllos[i],
-          ...state.getCurrentlyAllocated[i],
-          ...state.getDeploymentStatuses[i],
-          ...state.getUpgradeIndexer[i],
-          ...state.getQueryFeeDatas[i],
-          ...state.getNumEntities[i],
+          ...sub,
+          proportion,
+          apr,
+          newApr,
+          dailyRewards,
+          dailyRewardsCut,
+          maxAllo: maxAlloVal,
+          currentlyAllocated,
+          deploymentStatus,
+          upgradeIndexer: upgradeIndexerVal,
+          numEntities,
+          futureStakedTokens: futureStaked,
         };
+        if (queryFees) subgraphs[i].queryFees = queryFees;
       }
       return subgraphs;
     },
     getSelectedSubgraphs: (state) => {
-      let selectedSubgraphs = [];
-      for(let i = 0; i < state.selected.length; i++){
-        let subgraphIndex = state.subgraphs.findIndex((e) => e.deployment.ipfsHash == state.selected[i])
-        selectedSubgraphs[i] = {
-          ...state.subgraphs[subgraphIndex],
-          ...state.getProportions[subgraphIndex],
-          ...state.getAprs[subgraphIndex],
-          ...state.getMaxAllos[subgraphIndex],
-          ...state.getCurrentlyAllocated[subgraphIndex],
-        };
+      // Build index map for O(1) lookup
+      const indexMap = new Map();
+      for (let i = 0; i < state.subgraphs.length; i++) {
+        indexMap.set(state.subgraphs[i].deployment.ipfsHash, i);
+      }
+
+      const computed = state.getSubgraphs;
+      const selectedSubgraphs = [];
+      for (let i = 0; i < state.selected.length; i++) {
+        const idx = indexMap.get(state.selected[i]);
+        if (idx != null) {
+          selectedSubgraphs[i] = computed[idx];
+        }
       }
       return selectedSubgraphs;
     },
@@ -224,133 +337,8 @@ export const useSubgraphsStore = defineStore({
       );
       return dict;
     },
-    getDeploymentStatuses: (state) => {
-      let deploymentStatuses = [];
-      for(let i = 0; i < state.subgraphs.length; i++){
-        deploymentStatuses[i] = { deploymentStatus: deploymentStatusStore.getDeploymentStatuses[state.subgraphs[i].deployment.ipfsHash] || deploymentStatusStore.getBlankStatus }
-      }
-      return deploymentStatuses;
-    },
-    getQueryFeeDatas: (state) => {
-      let queryFeeDatas = [];
-      for(let i = 0; i < state.subgraphs.length; i++){
-        const queryFees = queryFeeStore.getQueryFeeDict[state.subgraphs[i].deployment.ipfsHash];
-        if(queryFees){
-          queryFeeDatas[i] = { queryFees: queryFees };
-        }else{
-          queryFeeDatas[i] = { };
-        }
-      }
-      return queryFeeDatas;
-    },
     getQueryFeeDash: (state) => {
       return queryFeeStore.queryFeeData.filter((e) => state.getSubgraphsDict[e.subgraphDeployment.id]).map((e) => Object.assign({}, e, state.getSubgraphsDict[e.subgraphDeployment.id] || {} ));
-    },
-    getProportions: (state) => {
-      let proportions = [];
-      for(let i = 0; i < state.subgraphs.length; i++){
-        let subgraph = state.subgraphs[i];
-        if(subgraph.deployment.stakedTokens > 0)
-            proportions[i] = { proportion: ( subgraph.deployment.signalledTokens / networkStore.getTotalTokensSignalled ) / ( subgraph.deployment.stakedTokens / networkStore.getTotalTokensAllocated ) };
-          else
-            proportions[i] = { proportion: 0 };
-      }
-      return proportions;
-    },
-    getAprs: (state) => {
-      let aprs = [];
-      for(let i = 0; i < state.subgraphs.length; i++){
-        let subgraph = state.subgraphs[i];
-        if(subgraph.deployment.signalledTokens > 0) {
-          aprs[i] = { apr: calculateNewApr(subgraph.deployment.signalledTokens, subgraph.deployment.stakedTokens, networkStore, "0") }
-        }else{
-          aprs[i] = { apr: 0 }
-        }
-      }
-      return aprs;
-    },
-    getFutureStakedTokens: (state) => {
-      let futureStakedTokens = [];
-      for(let i = 0; i < state.subgraphs.length; i++){
-        let subgraph = state.subgraphs[i];
-        let associatedAllocation = allocationStore.getSelectedAllocations.find((e) => e.subgraphDeployment.ipfsHash == subgraph.deployment.ipfsHash);
-        if(associatedAllocation){
-          futureStakedTokens[i] = { futureStakedTokens: new BigNumber(subgraph.deployment.stakedTokens).minus(associatedAllocation.allocatedTokens) };
-        }else{
-          futureStakedTokens[i] = { futureStakedTokens: new BigNumber(subgraph.deployment.stakedTokens) };
-        }
-      }
-      return futureStakedTokens;
-    },
-    getNewAprs: (state) => {
-      let newAprs = [];
-      if(subgraphSettingStore.newAprCalc){
-        for(let i = 0; i < state.subgraphs.length; i++){
-          let subgraph = state.subgraphs[i];
-          if(subgraph.deployment.signalledTokens > 0) {
-            newAprs[i] = { newApr: calculateNewApr(subgraph.deployment.signalledTokens, state.getFutureStakedTokens[i].futureStakedTokens, networkStore, subgraphSettingStore.settings.newAllocation)};
-          }else{
-            newAprs[i] = { newApr: 0 };
-          }
-        }
-      }else{
-        newAprs = Array(state.subgraphs.length).fill({ newApr: 0 });
-      }
-      return newAprs;
-    },
-    getDailyRewards: (state) => {
-      let dailyRewards = [];
-      for(let i = 0; i < state.subgraphs.length; i++){
-        let subgraph = state.subgraphs[i];
-        if(subgraph.deployment.signalledTokens > 0) {
-          dailyRewards[i] = { dailyRewards: calculateSubgraphDailyRewards(subgraph.deployment.signalledTokens, state.getFutureStakedTokens[i].futureStakedTokens, networkStore, subgraphSettingStore.settings.newAllocation) }
-        }else{
-          dailyRewards[i] = { dailyRewards: 0 }
-        }
-      }
-      return dailyRewards;
-    },
-    getDailyRewardsCuts() {
-      let dailyRewardsCuts = [];
-      for(let i = 0; i < this.subgraphs.length; i++){
-        let subgraph = this.subgraphs[i];
-        if (subgraph.deployment.stakedTokens > 0 && !accountStore.loading){
-          dailyRewardsCuts[i] = { dailyRewardsCut: indexerCut(this.getDailyRewards[i].dailyRewards, accountStore.cut) };
-        }else{
-          dailyRewardsCuts[i] = { dailyRewardsCut: 0 };
-        }
-      }
-      return dailyRewardsCuts;
-    },
-    getMaxAllos: (state) => {
-      let maxAllos = [];
-      for(let i = 0; i < state.subgraphs.length; i++){
-        let subgraph = state.subgraphs[i];
-        if(subgraph.deployment.signalledTokens > 0) {
-          maxAllos[i] = { maxAllo: maxAllo(subgraphSettingStore.settings.targetApr, subgraph.deployment.signalledTokens, networkStore, state.getFutureStakedTokens[i].futureStakedTokens) }
-        }else{
-          maxAllos[i] = { maxAllo: Number.MIN_SAFE_INTEGER }
-        }
-      }
-      return maxAllos;
-    },
-    getCurrentlyAllocated: (state) => {
-      let currentlyAllocated = [];
-      for(let i = 0; i < state.subgraphs.length; i++){
-        let subgraph = state.subgraphs[i];
-        let allo = allocationStore.getAllocations.find(e => {
-          return e.subgraphDeployment.ipfsHash === subgraph.deployment.ipfsHash;
-        });
-        let unallo = allocationStore.getSelectedAllocations.find(e => {
-          return e.subgraphDeployment.ipfsHash === subgraph.deployment.ipfsHash;
-        });
-        if(allo && !unallo) {
-          currentlyAllocated[i] = { currentlyAllocated: true }
-        }else{
-          currentlyAllocated[i] = { currentlyAllocated: false }
-        }
-      }
-      return currentlyAllocated;
     },
     getSubgraphNetworks: (state) => {
       let networks = [];
@@ -360,24 +348,6 @@ export const useSubgraphsStore = defineStore({
         }
       }
       return networks;
-    },
-    getUpgradeIndexer: (state) => {
-      let upgradeIndexer = [];
-      for(let i = 0; i < state.upgradeIndexer.length; i++){
-        upgradeIndexer[i] = { upgradeIndexer: state.upgradeIndexer[i] }
-      }
-      return upgradeIndexer;
-    },
-    getNumEntities: (state) => {
-      let numEntities = [];
-      for(let i = 0; i < state.subgraphs.length; i++){
-        if(deploymentStatusStore.getDeploymentEntities[state.subgraphs[i].deployment.ipfsHash]){
-          numEntities[i] = { numEntities: deploymentStatusStore.getDeploymentEntities[state.subgraphs[i].deployment.ipfsHash] };
-        } else{
-          numEntities[i] = { numEntities: null };
-        }
-      }
-      return numEntities;
     },
   },
   actions: {

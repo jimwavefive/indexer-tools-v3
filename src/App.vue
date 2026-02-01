@@ -10,17 +10,29 @@
   const tableSettingsStore = useTableSettingStore();
   const managerSettingStore = useManagerSettingStore();
 
-  subgraphSettingsStore.$subscribe(() => {
-    localStorage.subgraphSettings = JSON.stringify(subgraphSettingsStore.settings);
-  })
+  function debounce(fn, ms) {
+    let timer;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), ms);
+    };
+  }
 
-  tableSettingsStore.$subscribe(() => {
+  const persistSubgraphSettings = debounce(() => {
+    localStorage.subgraphSettings = JSON.stringify(subgraphSettingsStore.settings);
+  }, 500);
+
+  const persistTableSettings = debounce(() => {
     localStorage.subgraphTableSettings = JSON.stringify(tableSettingsStore.subgraphSettings);
     localStorage.allocationTableSettings = JSON.stringify(tableSettingsStore.allocationSettings);
-  })
+  }, 500);
 
-  managerSettingStore.$subscribe(() => {
+  const persistManagerSettings = debounce(() => {
     localStorage.managerSettings = JSON.stringify(managerSettingStore.settings);
-  })
+  }, 500);
+
+  subgraphSettingsStore.$subscribe(persistSubgraphSettings);
+  tableSettingsStore.$subscribe(persistTableSettings);
+  managerSettingStore.$subscribe(persistManagerSettings);
 
 </script>

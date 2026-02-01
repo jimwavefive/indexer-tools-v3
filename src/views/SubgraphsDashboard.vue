@@ -67,12 +67,12 @@
             density="compact" hide-details></v-text-field>
         </v-col>
         <v-col cols="auto">
-          <v-text-field v-model="subgraphSettingStore.settings.minSignal"
+          <v-text-field v-model="localMinSignal"
             type="number" label="Min Signal" style="width:9rem"
             density="compact" hide-details hide-spin-buttons></v-text-field>
         </v-col>
         <v-col cols="auto">
-          <v-text-field v-model="subgraphSettingStore.settings.maxSignal"
+          <v-text-field v-model="localMaxSignal"
             type="number" label="Max Signal" style="width:9rem"
             density="compact" hide-details hide-spin-buttons></v-text-field>
         </v-col>
@@ -107,10 +107,9 @@
             color="success" @update:model-value="onAutoTargetAprToggle"></v-switch>
         </v-col>
         <v-col cols="auto" v-if="autoTargetApr">
-          <v-text-field v-model="newAllocationSetterStore.reserveGRT"
+          <v-text-field v-model="localReserveGRT"
             type="number" label="Reserve GRT" style="width:9rem"
-            density="compact" hide-details hide-spin-buttons
-            @update:model-value="applyAutoTargetApr"></v-text-field>
+            density="compact" hide-details hide-spin-buttons></v-text-field>
         </v-col>
         <v-col cols="auto">
           <v-select v-model="subgraphSettingStore.settings.noRewardsFilter"
@@ -249,6 +248,13 @@
   import { exportToCsv } from '@/plugins/csvExport';
   import { useAppStore } from '@/store/app';
 
+  function debounce(fn, ms) {
+    let timer;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), ms);
+    };
+  }
 
   const search = ref('');
   const subgraphPage = ref(1);
@@ -259,6 +265,19 @@
   const autoTargetApr = ref(false);
   const previousTargetApr = ref(null);
   subgraphStore.fetchData();
+
+  // Local refs for debounced filter inputs
+  const localMinSignal = ref(subgraphSettingStore.settings.minSignal);
+  const localMaxSignal = ref(subgraphSettingStore.settings.maxSignal);
+  const localReserveGRT = ref(newAllocationSetterStore.reserveGRT);
+
+  const syncMinSignal = debounce((v) => { subgraphSettingStore.settings.minSignal = v; }, 300);
+  const syncMaxSignal = debounce((v) => { subgraphSettingStore.settings.maxSignal = v; }, 300);
+  const syncReserveGRT = debounce((v) => { newAllocationSetterStore.reserveGRT = v; }, 300);
+
+  watch(localMinSignal, syncMinSignal);
+  watch(localMaxSignal, syncMaxSignal);
+  watch(localReserveGRT, (v) => { syncReserveGRT(v); applyAutoTargetApr(); });
 
   function onAutoTargetAprToggle(enabled) {
     if (enabled) {
@@ -280,11 +299,13 @@
     }
   }
 
-  watch(() => subgraphStore.selected, () => {
+  const debouncedAutoTargetApr = debounce(() => {
     if (autoTargetApr.value) {
-      nextTick(() => applyAutoTargetApr());
+      applyAutoTargetApr();
     }
-  }, { deep: true });
+  }, 200);
+
+  watch(() => subgraphStore.selected, debouncedAutoTargetApr, { deep: true });
 
   const { selected } = storeToRefs(subgraphStore);
 
@@ -313,6 +334,8 @@
 
   function resetFilters () {
     search.value = "";
+    localMinSignal.value = "";
+    localMaxSignal.value = "";
     subgraphSettingStore.settings.minSignal = "";
     subgraphSettingStore.settings.maxSignal = "";
     subgraphSettingStore.settings.noRewardsFilter = 1;
