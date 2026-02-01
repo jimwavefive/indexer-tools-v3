@@ -129,7 +129,8 @@
           <v-slider
               min="0"
               :max="parseInt(fromWei(toBN(newAllocationSetterStore.calculatedAvailableStake))) + parseFloat(newAllocations[item.deployment.ipfsHash])"
-              v-model="newAllocations[item.deployment.ipfsHash]"
+              :model-value="pendingAllocations[item.deployment.ipfsHash] != null ? pendingAllocations[item.deployment.ipfsHash] : newAllocations[item.deployment.ipfsHash]"
+              @update:model-value="onSliderUpdate(item.deployment.ipfsHash, $event)"
               style="max-width: 500px; min-width:100px;"
               class="mt-4"
               step="1"
@@ -162,7 +163,7 @@
 import { format } from 'date-fns';
 import { fromWei, toBN } from '@/plugins/web3Utils';
 import numeral from 'numeral';
-import { ref, watch } from 'vue';
+import { ref, reactive, watch } from 'vue';
 import { useSubgraphsStore } from '@/store/subgraphs';
 import { useNewAllocationSetterStore } from '@/store/newAllocationSetter';
 import { storeToRefs } from 'pinia';
@@ -174,6 +175,18 @@ newAllocationSetterStore.update();
 const itemsPerPage = ref(50);
 const alloPage = ref(1);
 
+// Debounced slider: pendingAllocations provides instant visual feedback,
+// while the store update is debounced to avoid BigNumber cascades.
+const pendingAllocations = reactive({});
+let sliderTimers = {};
+
+function onSliderUpdate(ipfsHash, value) {
+  pendingAllocations[ipfsHash] = value;
+  clearTimeout(sliderTimers[ipfsHash]);
+  sliderTimers[ipfsHash] = setTimeout(() => {
+    newAllocationSetterStore.newAllocations[ipfsHash] = value;
+  }, 150);
+}
 
 const { newAllocations, getSelectedS, minAllocation, minAllocation0Signal, customPOIs } = storeToRefs(newAllocationSetterStore);
 

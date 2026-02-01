@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import gql from 'graphql-tag';
 import { qosSubgraphClient } from "@/plugins/qosSubgraphClient";
+import { getLatestDayNumber } from "@/plugins/latestDayCache";
 import { useAccountStore } from './accounts';
 import { useChainStore } from './chains';
 import { useNotificationStore } from './notifications';
@@ -53,18 +54,12 @@ export const useQosStore = defineStore('qosStore', {
         return [];
       }
 
-      return qosSubgraphClient.query({
-        query: gql`query{
-          queryDailyDataPoints(orderBy: dayNumber, first: 1, orderDirection: desc) {
-            dayNumber
-          }
-        }`,
-      })
-      .then(({ data }) => {
+      return getLatestDayNumber()
+      .then((dayNumber) => {
         return qosSubgraphClient.query({
           query: QOS_QUERY,
           variables: {
-            dayNumber: data.queryDailyDataPoints[0].dayNumber - 1,
+            dayNumber: dayNumber,
             indexer: accountStore.getActiveAccount.address,
           }
         }).then(({ data }) => {

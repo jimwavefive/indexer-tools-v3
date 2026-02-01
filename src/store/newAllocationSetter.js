@@ -28,79 +28,88 @@ export const useNewAllocationSetterStore = defineStore('allocationSetter', {
     getSelected: () => subgraphStore.selected,
     getSelectedS: () => subgraphStore.getSelectedSubgraphs,
     getSelectedSubgraphs: (state) => {
-      let selectedSubgraphs = [];
-      for(let i = 0; i < subgraphStore.getSelectedSubgraphs.length; i++){
-        selectedSubgraphs[i] = {
-          ...state.getSelectedS[i],
-          ...state.getNewAprs[i],
-          ...state.getDailyRewards[i],
-          ...state.getDailyRewardsCuts[i],
-          ...state.getFutureStakedTokens[i],
-          ...state.getNewProportions[i],
+      const selected = subgraphStore.getSelectedSubgraphs;
+      const len = selected.length;
+      if (len === 0) return [];
+
+      // Pre-build Map for selected allocations
+      const selectedAlloMap = new Map();
+      for (const a of allocationStore.getSelectedAllocations) {
+        selectedAlloMap.set(a.subgraphDeployment.ipfsHash, a);
+      }
+
+      const totalSignalled = networkStore.getTotalTokensSignalled;
+      const totalAllocated = networkStore.getTotalTokensAllocated;
+      const accountLoading = accountStore.loading;
+      const cut = accountStore.cut;
+      const WEI = new BigNumber(10).pow(18);
+
+      const result = new Array(len);
+      for (let i = 0; i < len; i++) {
+        const sub = selected[i];
+        const ipfsHash = sub.deployment.ipfsHash;
+        const signalled = sub.deployment.signalledTokens;
+        const staked = sub.deployment.stakedTokens;
+        const newAlloGRT = state.newAllocations[ipfsHash] ? state.newAllocations[ipfsHash].toString() : "0";
+        const newAlloWei = toWei(newAlloGRT);
+
+        // Future staked tokens
+        const closingAllo = selectedAlloMap.get(ipfsHash);
+        const futureStaked = closingAllo
+          ? new BigNumber(staked).minus(closingAllo.allocatedTokens)
+          : new BigNumber(staked);
+
+        // New APR
+        const newApr = signalled != "0"
+          ? calculateNewApr(signalled, futureStaked, networkStore, newAlloGRT, newAlloWei)
+          : 0;
+
+        // Daily rewards
+        const dailyRewards = staked != "0" && !accountLoading
+          ? calculateSubgraphDailyRewards(signalled, futureStaked, networkStore, newAlloGRT, newAlloWei)
+          : 0;
+
+        // Daily rewards cut
+        const dailyRewardsCut = staked > 0 && !accountLoading
+          ? indexerCut(dailyRewards, cut)
+          : 0;
+
+        // New proportion
+        const newAlloNum = state.newAllocations[ipfsHash] ? state.newAllocations[ipfsHash] : 0;
+        const futureStakedPlusNew = futureStaked.plus(new BigNumber(newAlloNum).multipliedBy(WEI));
+        const newProportion = futureStakedPlusNew > 0
+          ? (signalled / totalSignalled) / (futureStakedPlusNew / totalAllocated)
+          : 0;
+
+        result[i] = {
+          ...sub,
+          newApr,
+          dailyRewards,
+          dailyRewardsCut,
+          futureStakedTokens: futureStaked,
+          newProportion,
         };
       }
-      return selectedSubgraphs;
+      return result;
     },
+    // Keep getFutureStakedTokens for calculatedAutoTargetApr compatibility
     getFutureStakedTokens: (state) => {
-      let futureStakedTokens = [];
-      for(let i = 0; i < state.getSelectedS.length; i++){
-        let subgraph = state.getSelectedS[i];
-        let associatedAllocation = allocationStore.getSelectedAllocations.find((e) => e.subgraphDeployment.ipfsHash == subgraph.deployment.ipfsHash);
-        if(associatedAllocation){
-          futureStakedTokens[i] = { futureStakedTokens: new BigNumber(subgraph.deployment.stakedTokens).minus(associatedAllocation.allocatedTokens) };
-        }else{
-          futureStakedTokens[i] = { futureStakedTokens: new BigNumber(subgraph.deployment.stakedTokens) };
-        }
+      const selected = subgraphStore.getSelectedSubgraphs;
+      const selectedAlloMap = new Map();
+      for (const a of allocationStore.getSelectedAllocations) {
+        selectedAlloMap.set(a.subgraphDeployment.ipfsHash, a);
       }
-      return futureStakedTokens;
-    },
-    getNewAprs: (state) => {
-      let newAprs = [];
-      for(let i = 0; i < state.getSelectedS.length; i++){
-        let subgraph = state.getSelectedS[i];
-        if(subgraph.deployment.signalledTokens != "0") {
-          newAprs[i] = { newApr: calculateNewApr(subgraph.deployment.signalledTokens, state.getFutureStakedTokens[i].futureStakedTokens, networkStore, (state.newAllocations[subgraph.deployment.ipfsHash] ? state.newAllocations[subgraph.deployment.ipfsHash].toString() : "0"))};
-        }else{
-          newAprs[i] = { newApr: 0 };
-        }
+      const result = new Array(selected.length);
+      for (let i = 0; i < selected.length; i++) {
+        const sub = selected[i];
+        const closingAllo = selectedAlloMap.get(sub.deployment.ipfsHash);
+        result[i] = {
+          futureStakedTokens: closingAllo
+            ? new BigNumber(sub.deployment.stakedTokens).minus(closingAllo.allocatedTokens)
+            : new BigNumber(sub.deployment.stakedTokens)
+        };
       }
-      return newAprs;
-    },
-    getNewProportions: (state) => {
-      let proportions = [];
-      for(let i = 0; i < state.getSelectedS.length; i++){
-        let subgraph = state.getSelectedS[i];
-        const newAllocation = state.newAllocations[subgraph.deployment.ipfsHash] ? state.newAllocations[subgraph.deployment.ipfsHash] : 0;
-        if(state.getFutureStakedTokens[i].futureStakedTokens.plus(new BigNumber(newAllocation*10**18)) > 0)
-            proportions[i] = { newProportion: ( subgraph.deployment.signalledTokens / networkStore.getTotalTokensSignalled ) / ( state.getFutureStakedTokens[i].futureStakedTokens.plus(new BigNumber(newAllocation*10**18)) / networkStore.getTotalTokensAllocated ) };
-          else
-            proportions[i] = { newProportion: 0 };
-      }
-      return proportions;
-    },
-    getDailyRewards: (state) => {
-      let dailyRewards = [];
-      for(let i = 0; i < state.getSelectedS.length; i++){
-        let subgraph = state.getSelectedS[i];
-        if(subgraph.deployment.stakedTokens != "0" && !accountStore.loading) {
-          dailyRewards[i] = { dailyRewards: calculateSubgraphDailyRewards(subgraph.deployment.signalledTokens, state.getFutureStakedTokens[i].futureStakedTokens, networkStore, (state.newAllocations[subgraph.deployment.ipfsHash] ? state.newAllocations[subgraph.deployment.ipfsHash].toString() : "0")) }
-        }else{
-          dailyRewards[i] = { dailyRewards: 0 }
-        }
-      }
-      return dailyRewards;
-    },
-    getDailyRewardsCuts: (state) => {
-      let dailyRewardsCuts = [];
-      for(let i = 0; i < state.getSelectedS.length; i++){
-        let subgraph = state.getSelectedS[i];
-        if (subgraph.deployment.stakedTokens > 0 && !accountStore.loading){
-          dailyRewardsCuts[i] = { dailyRewardsCut: indexerCut(state.getDailyRewards[i].dailyRewards, accountStore.cut) };
-        }else{
-          dailyRewardsCuts[i] = { dailyRewardsCut: 0 };
-        }
-      }
-      return dailyRewardsCuts;
+      return result;
     },
     totalClosing: (state) => {
       return state.getSelectedSubgraphs.reduce((sum, cur) => sum.plus(cur.allocatedTokens), BigNumber(0))

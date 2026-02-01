@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { useSubgraphSettingStore } from './subgraphSettings';
 import gql from 'graphql-tag';
 import { qosSubgraphClient } from "@/plugins/qosSubgraphClient";
+import { getLatestDayNumber } from "@/plugins/latestDayCache";
 import { useNotificationStore } from './notifications';
 
 
@@ -67,18 +68,12 @@ export const useQueryFeesStore = defineStore('queryFeeStore', {
       this.error = true;
       this.loading = true;
 
-      return qosSubgraphClient.query({
-        query: gql`query{
-          queryDailyDataPoints(orderBy: dayNumber, first: 1, orderDirection: desc) {
-            dayNumber
-          }
-        }`,
-      })
-      .then(({ data }) => {
+      return getLatestDayNumber()
+      .then((dayNumber) => {
         return qosSubgraphClient.query({
           query: subgraphSettingStore.settings.queryFilters.networkFilter.length > 0 ? QOS_QUERY : QOS_QUERY_NO_FILTER,
           variables: {
-            dayNumber: data.queryDailyDataPoints[0].dayNumber - 1,
+            dayNumber: dayNumber,
             networkFilter: subgraphSettingStore.settings.queryFilters.networkFilter,
           }
         }).then(({ data }) => {
