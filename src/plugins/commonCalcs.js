@@ -93,32 +93,71 @@ function indexerCut(rewards, rewardCut){
 }
 
 function calculateAutoTargetApr(selectedSubgraphs, futureStakedTokens, networkStore, availableStakeWei, closingStakeWei, reserveGRT = '1') {
-  let totalSignalProportion = new BigNumber(0);
-  let totalFutureStaked = new BigNumber(0);
+  const reserveWei = new BigNumber(reserveGRT).multipliedBy(new BigNumber(10).pow(18));
 
+  // Build initial eligible set (non-denied, has signal)
+  let eligible = [];
   for (let i = 0; i < selectedSubgraphs.length; i++) {
     const sub = selectedSubgraphs[i];
     if (sub.deployment.deniedAt || sub.deployment.signalledTokens == 0) continue;
-    totalSignalProportion = totalSignalProportion.plus(
-      new BigNumber(sub.deployment.signalledTokens).dividedBy(networkStore.getTotalTokensSignalled)
-    );
-    totalFutureStaked = totalFutureStaked.plus(futureStakedTokens[i].futureStakedTokens);
+    eligible.push({ sub, i });
   }
 
-  if (totalSignalProportion.isZero()) return new BigNumber(0);
+  // Iteratively exclude subgraphs that would have negative maxAllo at the
+  // computed APR. Without this, setAllMaxAllos skips negative-maxAllo
+  // subgraphs but the positive ones over-allocate to compensate.
+  while (eligible.length > 0) {
+    let totalSignalProportion = new BigNumber(0);
+    let totalFutureStaked = new BigNumber(0);
 
-  const reserveWei = new BigNumber(reserveGRT).multipliedBy(new BigNumber(10).pow(18));
-  const denominator = new BigNumber(availableStakeWei)
-    .plus(closingStakeWei)
-    .minus(reserveWei)
-    .plus(totalFutureStaked);
+    for (const { sub, i } of eligible) {
+      totalSignalProportion = totalSignalProportion.plus(
+        new BigNumber(sub.deployment.signalledTokens).dividedBy(networkStore.getTotalTokensSignalled)
+      );
+      totalFutureStaked = totalFutureStaked.plus(futureStakedTokens[i].futureStakedTokens);
+    }
 
-  if (denominator.isLessThanOrEqualTo(0)) return new BigNumber(0);
+    if (totalSignalProportion.isZero()) return new BigNumber(0);
 
-  return new BigNumber(100)
-    .multipliedBy(networkStore.getIssuancePerYear)
-    .multipliedBy(totalSignalProportion)
-    .dividedBy(denominator);
+    const denominator = new BigNumber(availableStakeWei)
+      .plus(closingStakeWei)
+      .minus(reserveWei)
+      .plus(totalFutureStaked);
+
+    if (denominator.isLessThanOrEqualTo(0)) return new BigNumber(0);
+
+    const apr = new BigNumber(100)
+      .multipliedBy(networkStore.getIssuancePerYear)
+      .multipliedBy(totalSignalProportion)
+      .dividedBy(denominator);
+
+    const targetApr = apr.dividedBy(100);
+
+    // Check which subgraphs would have negative maxAllo at this APR
+    let needsRemoval = false;
+    let newEligible = [];
+    for (const item of eligible) {
+      const { sub, i } = item;
+      const computedMaxAllo = new BigNumber(sub.deployment.signalledTokens)
+        .dividedBy(networkStore.getTotalTokensSignalled)
+        .multipliedBy(networkStore.getIssuancePerYear)
+        .dividedBy(targetApr)
+        .minus(futureStakedTokens[i].futureStakedTokens);
+
+      if (computedMaxAllo.isGreaterThan(0)) {
+        newEligible.push(item);
+      } else {
+        needsRemoval = true;
+      }
+    }
+
+    if (!needsRemoval) return apr;
+    if (newEligible.length === 0) return new BigNumber(0);
+
+    eligible = newEligible;
+  }
+
+  return new BigNumber(0);
 }
 
 export { maxAllo, calculateApr, calculateNewApr, calculateAllocationDailyRewards, calculateSubgraphDailyRewards, calculateReadableDuration, indexerCut, calculateAutoTargetApr };
