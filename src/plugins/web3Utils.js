@@ -1,11 +1,13 @@
 import BigNumber from 'bignumber.js';
 
+const WEI_PER_ETHER = new BigNumber(10).pow(18);
+
 /**
  * Convert a value in wei to ether.
  * Equivalent to Web3.utils.fromWei(value, 'ether').
  */
 export function fromWei(value) {
-  return new BigNumber(value).dividedBy(new BigNumber(10).pow(18)).toFixed();
+  return new BigNumber(value).dividedBy(WEI_PER_ETHER).toFixed();
 }
 
 /**
@@ -13,7 +15,7 @@ export function fromWei(value) {
  * Equivalent to Web3.utils.toWei(value, 'ether').
  */
 export function toWei(value) {
-  return new BigNumber(value).multipliedBy(new BigNumber(10).pow(18)).toFixed(0);
+  return new BigNumber(value).multipliedBy(WEI_PER_ETHER).toFixed(0);
 }
 
 /**

@@ -1,6 +1,7 @@
 <template>
   <div>
     <v-stepper
+      v-model="currentStep"
       alt-labels
       editable
       :items="['Close Allocations', 'Set Custom POIs', 'Pick Subgraphs', 'Set Allocations', 'Execute Allocations']"
@@ -9,27 +10,29 @@
         <AllocationsDashboard selectable :default-items-per-page="50" />
       </template>
       <template v-slot:item.2>
-        <CustomPoiSetter></CustomPoiSetter>
+        <CustomPoiSetter v-if="currentStep >= 2"></CustomPoiSetter>
       </template>
       <template v-slot:item.3>
-        <SubgraphsDashboard selectable :default-items-per-page="50" />
+        <SubgraphsDashboard v-if="currentStep >= 3" selectable :default-items-per-page="50" />
       </template>
       <template v-slot:item.4>
-        <AllocationSetter />        
+        <AllocationSetter v-if="currentStep >= 4" />
       </template>
       <template v-slot:item.5>
-        <div
-          class="mb-15 mx-5"
-          v-if="accountStore.getAgentConnectStatus"
-        >
-          <ActionQueueManager></ActionQueueManager>
-        </div>
-        <div class="mt-12 mb-10 ml-5">
-          <h3>Action Queue Commands <small>(>=v0.20.0)</small></h3>
-          <v-textarea readonly :value="newAllocationSetterStore.actionsQueueBuildCommands" rows="10" ></v-textarea>
-          <h3>Indexing Rule Commands</h3>
-          <v-textarea readonly :value="newAllocationSetterStore.buildCommands" rows="10" ></v-textarea>
-        </div>
+        <template v-if="currentStep >= 5">
+          <div
+            class="mb-15 mx-5"
+            v-if="accountStore.getAgentConnectStatus"
+          >
+            <ActionQueueManager></ActionQueueManager>
+          </div>
+          <div class="mt-12 mb-10 ml-5">
+            <h3>Action Queue Commands <small>(>=v0.20.0)</small></h3>
+            <v-textarea readonly :value="newAllocationSetterStore.actionsQueueBuildCommands" rows="10" ></v-textarea>
+            <h3>Indexing Rule Commands</h3>
+            <v-textarea readonly :value="newAllocationSetterStore.buildCommands" rows="10" ></v-textarea>
+          </div>
+        </template>
       </template>
     </v-stepper>
     <v-footer
@@ -91,14 +94,15 @@
 </template>
 
 <script setup>
+import { ref, defineAsyncComponent } from "vue";
 import numeral from "numeral";
 import { fromWei, toBN } from '@/plugins/web3Utils';
 import BigNumber from "bignumber.js";
-import AllocationsDashboard from "./AllocationsDashboard.vue";
-import SubgraphsDashboard from "./SubgraphsDashboard.vue";
-import AllocationSetter from "@/components/AllocationSetter.vue";
-import CustomPoiSetter from "@/components/CustomPOISetter.vue";
-import ActionQueueManager from "./ActionQueueManager.vue";
+const AllocationsDashboard = defineAsyncComponent(() => import("./AllocationsDashboard.vue"));
+const SubgraphsDashboard = defineAsyncComponent(() => import("./SubgraphsDashboard.vue"));
+const AllocationSetter = defineAsyncComponent(() => import("@/components/AllocationSetter.vue"));
+const CustomPoiSetter = defineAsyncComponent(() => import("@/components/CustomPOISetter.vue"));
+const ActionQueueManager = defineAsyncComponent(() => import("./ActionQueueManager.vue"));
 import { useAllocationStore } from "@/store/allocations";
 import { useNewAllocationSetterStore } from "@/store/newAllocationSetter";
 import { VStepper } from 'vuetify/components/VStepper'
@@ -108,6 +112,7 @@ const accountStore = useAccountStore();
 const allocationStore = useAllocationStore();
 const newAllocationSetterStore = useNewAllocationSetterStore();
 
+const currentStep = ref(1);
 </script>
 
 <style>

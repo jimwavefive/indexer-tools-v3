@@ -98,179 +98,122 @@ export const useAllocationStore = defineStore('allocationStore', {
       return allocations;
     },
     getAllocations: (state) => {
-      let allocations = [];
-      for(let i = 0; i < state.allocations.length; i++){
-        allocations[i] = {
-          ...state.allocations[i],
-          ...state.getActiveDurations[i],
-          ...state.getReadableDurations[i],
-          ...state.getEpochDurations[i],
-          ...state.getProportions[i],
-          ...state.getAprs[i],
-          ...state.getDailyRewards[i],
-          ...state.getDailyRewardsCuts[i],
-          ...state.getPendingRewards[i],
-          ...state.getPendingRewardsCuts[i],
-          ...state.getDeploymentStatuses[i],
-          ...state.getQosDatas[i],
-          ...state.getQueryFeeDatas[i],
-          ...state.getStatusChecks[i],
+      const len = state.allocations.length;
+      if (len === 0) return [];
+
+      // Pre-compute constants
+      const totalSignalled = networkStore.getTotalTokensSignalled;
+      const totalAllocated = networkStore.getTotalTokensAllocated;
+      const currentEpoch = networkStore.getCurrentEpoch;
+      const accountLoading = accountStore.loading;
+      const cut = accountStore.cut;
+      const poiQueryStatus = accountStore.getPOIQueryStatus;
+      const depStatuses = deploymentStatusStore.getDeploymentStatuses;
+      const blankStatus = deploymentStatusStore.getBlankStatus;
+      const depFailures = deploymentStatusStore.getDeploymentFailures;
+      const qosDict = qosStore.getQosDict;
+      const queryFeeDict = queryFeeStore.getQueryFeeDict;
+      const chainStatus = chainValidation.getChainStatus;
+      const blockNumbers = epochStore.getBlockNumbers;
+      const nowSec = Math.floor(Date.now() / 1000);
+
+      const allocations = new Array(len);
+      for (let i = 0; i < len; i++) {
+        const allo = state.allocations[i];
+        const ipfsHash = allo.subgraphDeployment.ipfsHash;
+        const signalled = allo.subgraphDeployment.signalledTokens;
+        const staked = allo.subgraphDeployment.stakedTokens;
+        const network = allo.subgraphDeployment.manifest?.network;
+
+        // Duration
+        const activeDuration = nowSec - allo.createdAt;
+        const readableDuration = calculateReadableDuration(activeDuration);
+        const epochDuration = currentEpoch - allo.createdAtEpoch;
+
+        // Proportion
+        const proportion = staked > 0
+          ? (signalled / totalSignalled) / (staked / totalAllocated)
+          : 0;
+
+        // APR
+        const apr = staked > 0
+          ? calculateApr(signalled, staked, networkStore).toString()
+          : 0;
+
+        // Daily rewards
+        const dailyRewards = staked > 0
+          ? calculateAllocationDailyRewards(signalled, staked, allo.allocatedTokens, networkStore)
+          : 0;
+
+        // Daily rewards cut
+        const dailyRewardsCut = staked > 0 && !accountLoading
+          ? indexerCut(dailyRewards, cut)
+          : 0;
+
+        // Pending rewards
+        const pendingRewardsData = state.pendingRewards[i] || { value: BigNumber(0), loading: false, loaded: false };
+
+        // Pending rewards cut
+        const pendingRewardsCut = pendingRewardsData.value > 0 && !accountLoading
+          ? indexerCut(pendingRewardsData.value, cut)
+          : BigNumber(0);
+
+        // Deployment status
+        const deploymentStatus = depStatuses[ipfsHash] || blankStatus;
+
+        // QoS
+        const qos = qosDict[ipfsHash];
+
+        // Query fees
+        const queryFees = queryFeeDict[ipfsHash];
+
+        // Status checks
+        const validChain = poiQueryStatus ? chainStatus[network] : null;
+        const synced = blockNumbers[network] <= deploymentStatus?.chains?.[0]?.latestBlock?.number;
+        const deterministicFailure = synced ? null : deploymentStatus?.health == 'failed' && deploymentStatus?.fatalError && deploymentStatus?.fatalError?.deterministic == true;
+        const otherIndexerStatus = depFailures[ipfsHash];
+        const statusChecks = {
+          synced,
+          deterministicFailure,
+          healthComparison: otherIndexerStatus?.healthy > otherIndexerStatus?.failed,
+          validChain,
+          healthyCount: otherIndexerStatus?.healthy,
+          failedCount: otherIndexerStatus?.failed,
         };
+
+        allocations[i] = {
+          ...allo,
+          activeDuration,
+          readableDuration,
+          epochDuration,
+          proportion,
+          apr,
+          dailyRewards,
+          dailyRewardsCut,
+          pendingRewards: pendingRewardsData,
+          pendingRewardsCut,
+          deploymentStatus,
+          statusChecks,
+        };
+        if (qos) allocations[i].qos = qos;
+        if (queryFees) allocations[i].queryFees = queryFees;
       }
       return allocations;
     },
     getSelectedAllocations: (state) => {
-      let allocations = [];
-      for(let i = 0; i < state.selected.length; i++){
-        let allocation = state.allocations.find((e) => e.id == state.selected[i]);
-        allocations[i] = {
-          ...allocation,
+      // Build Map for O(1) lookup
+      const alloMap = new Map();
+      for (const a of state.allocations) {
+        alloMap.set(a.id, a);
+      }
+      const allocations = [];
+      for (let i = 0; i < state.selected.length; i++) {
+        const allocation = alloMap.get(state.selected[i]);
+        if (allocation) {
+          allocations[i] = { ...allocation };
         }
       }
       return allocations;
-    },
-    getQosDatas: (state) => {
-      let qosDatas = [];
-      for(let i = 0; i < state.allocations.length; i++){
-        const qos = qosStore.getQosDict[state.allocations[i].subgraphDeployment.ipfsHash];
-        if(qos){
-          qosDatas[i] = { qos: qos };
-        }else{
-          qosDatas[i] = { };
-        }
-      }
-      return qosDatas;
-    },
-    getQueryFeeDatas: (state) => {
-      let queryFeeDatas = [];
-      for(let i = 0; i < state.allocations.length; i++){
-        const queryFeeData = queryFeeStore.getQueryFeeDict[state.allocations[i].subgraphDeployment.ipfsHash];
-        if(queryFeeData){
-          queryFeeDatas[i] = { queryFees: queryFeeData }
-        }else{
-          queryFeeDatas[i] = { }
-        }
-      }
-      return queryFeeDatas;
-    },
-    getStatusChecks: (state) => {
-      let statusChecksData = [];
-      for(let i = 0; i < state.allocations.length; i++){
-        const deploymentStatus = deploymentStatusStore.getDeploymentStatuses[state.allocations[i].subgraphDeployment.ipfsHash];
-
-        const validChain = accountStore.getPOIQueryStatus ? chainValidation.getChainStatus[state.allocations[i].subgraphDeployment.manifest?.network] : null;
-        const synced = epochStore.getBlockNumbers[state.allocations[i].subgraphDeployment.manifest?.network] <= deploymentStatus?.chains?.[0]?.latestBlock?.number;
-        const deterministicFailure = synced ? null : deploymentStatus?.health == 'failed' && deploymentStatus?.fatalError && deploymentStatus?.fatalError?.deterministic == true;
-
-        const otherIndexerStatus = deploymentStatusStore.getDeploymentFailures[state.allocations[i].subgraphDeployment.ipfsHash];
-        let healthComparison = otherIndexerStatus?.healthy > otherIndexerStatus?.failed;
-        let statusChecks = {
-          synced: synced,
-          deterministicFailure: deterministicFailure,
-          healthComparison: healthComparison,
-          validChain: validChain,
-          healthyCount: otherIndexerStatus?.healthy,
-          failedCount: otherIndexerStatus?.failed,
-        };
-        statusChecksData[i] = { statusChecks: statusChecks };
-      }
-      return statusChecksData;
-    },
-    getActiveDurations: (state) => {
-      let activeDurations = [];
-      for(let i = 0; i < state.allocations.length; i++){
-        let allocation = state.allocations[i];
-        activeDurations[i] = { activeDuration: Math.floor(Date.now() / 1000) - allocation.createdAt }
-      }
-      return activeDurations;
-    },
-    getReadableDurations: (state) => {
-      let readableDurations = [];
-      for(let i = 0; i < state.allocations.length; i++){
-
-        readableDurations[i] = { readableDuration: calculateReadableDuration(state.getActiveDurations[i].activeDuration) }
-      }
-      return readableDurations;
-    },
-    getEpochDurations: (state) => {
-      let epochDurations = [];
-      for(let i = 0; i < state.allocations.length; i++){
-        let allocation = state.allocations[i];
-        epochDurations[i] = { epochDuration:networkStore.getCurrentEpoch - allocation.createdAtEpoch };
-      }
-      return epochDurations;
-    },
-    getProportions: (state) => {
-      let proportions = [];
-      for(let i = 0; i < state.allocations.length; i++){
-        let allocation = state.allocations[i];
-        if (allocation.subgraphDeployment.stakedTokens > 0)
-          proportions[i] = { proportion: ( allocation.subgraphDeployment.signalledTokens / networkStore.getTotalTokensSignalled ) / ( allocation.subgraphDeployment.stakedTokens / networkStore.getTotalTokensAllocated ) };
-        else
-          proportions[i] = { proportion:  0 };
-      }
-      return proportions;
-    },
-    getAprs: (state) => {
-      let aprs = [];
-      for(let i = 0; i < state.allocations.length; i++){
-        let allocation = state.allocations[i];
-        if (allocation.subgraphDeployment.stakedTokens > 0)
-          aprs[i] = { apr: calculateApr(allocation.subgraphDeployment.signalledTokens, allocation.subgraphDeployment.stakedTokens, networkStore).toString()};
-        else
-          aprs[i] = { apr: 0 };
-      }
-      return aprs;
-    },
-    getDailyRewards: (state) => {
-      let dailyRewards = [];
-      for(let i = 0; i < state.allocations.length; i++){
-        let allocation = state.allocations[i];
-        if (allocation.subgraphDeployment.stakedTokens > 0){
-          dailyRewards[i] = { dailyRewards: calculateAllocationDailyRewards(allocation.subgraphDeployment.signalledTokens, allocation.subgraphDeployment.stakedTokens, allocation.allocatedTokens, networkStore)}
-        }else{
-          dailyRewards[i] = { dailyRewards: 0 };
-        }
-      }
-      return dailyRewards;
-    },
-    getDailyRewardsCuts() {
-      let dailyRewardsCuts = [];
-      for(let i = 0; i < this.allocations.length; i++){
-        let allocation = this.allocations[i];
-        if (allocation.subgraphDeployment.stakedTokens > 0 && !accountStore.loading){
-          dailyRewardsCuts[i] = { dailyRewardsCut: indexerCut(this.getDailyRewards[i].dailyRewards, accountStore.cut) };
-        }else{
-          dailyRewardsCuts[i] = { dailyRewardsCut: 0 };
-        }
-      }
-      return dailyRewardsCuts;
-    },
-    getPendingRewards: (state) => {
-      let pendingRewards = [];
-      for(let i = 0; i < state.pendingRewards.length; i++){
-        pendingRewards[i] = { pendingRewards: state.pendingRewards[i] }
-      }
-      return pendingRewards;
-    },
-    getPendingRewardsCuts() {
-      let pendingRewardsCuts = [];
-      for(let i = 0; i < this.pendingRewards.length; i++){
-        let pendingReward = this.pendingRewards[i];
-        if(pendingReward.value > 0 && !accountStore.loading){
-          pendingRewardsCuts[i] = { pendingRewardsCut: indexerCut(this.getPendingRewards[i].pendingRewards.value, accountStore.cut) };
-        }else{
-          pendingRewardsCuts[i] = { pendingRewardsCut: BigNumber(0) };
-        }
-      }
-      return pendingRewardsCuts;
-    },
-    getDeploymentStatuses: (state) => {
-      let deploymentStatuses = [];
-      for(let i = 0; i < state.allocations.length; i++){
-        deploymentStatuses[i] = { deploymentStatus: deploymentStatusStore.getDeploymentStatuses[state.allocations[i].subgraphDeployment.ipfsHash] || deploymentStatusStore.getBlankStatus }
-      }
-      return deploymentStatuses;
     },
     getSubgraphNetworks: (state) => {
       let networks = ["mainnet","arbitrum-one","matic"];
@@ -314,9 +257,11 @@ export const useAllocationStore = defineStore('allocationStore', {
     calculatedClosingRewardsPerYear: (state) => {
       let totalRewardsPerYear = new BigNumber(0);
       if(state.selected.length > 0){
-        for(const i in state.selected){
-          let allocation = state.allocations.find((e) => e.id == state.selected[i]);
-          if(!allocation.subgraphDeployment.deniedAt){
+        const alloMap = new Map();
+        for (const a of state.allocations) alloMap.set(a.id, a);
+        for(const id of state.selected){
+          let allocation = alloMap.get(id);
+          if(allocation && !allocation.subgraphDeployment.deniedAt){
             totalRewardsPerYear = totalRewardsPerYear.plus(
               new BigNumber(allocation.subgraphDeployment.signalledTokens)
                   .dividedBy(networkStore.getTotalTokensSignalled)
@@ -326,7 +271,6 @@ export const useAllocationStore = defineStore('allocationStore', {
                   )
             );
           }
-          
         }
       }
       return totalRewardsPerYear;
@@ -334,8 +278,11 @@ export const useAllocationStore = defineStore('allocationStore', {
     calculatedClosingStake: (state) => {
       let totalAllocatedStake = new BigNumber(0);
       if(state.selected.length > 0){
-        for(const i in state.selected){
-          totalAllocatedStake = totalAllocatedStake.plus(state.allocations.find((e) => e.id == state.selected[i]).allocatedTokens);
+        const alloMap = new Map();
+        for (const a of state.allocations) alloMap.set(a.id, a);
+        for(const id of state.selected){
+          const allo = alloMap.get(id);
+          if (allo) totalAllocatedStake = totalAllocatedStake.plus(allo.allocatedTokens);
         }
       }
       return totalAllocatedStake;

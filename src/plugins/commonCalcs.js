@@ -3,6 +3,8 @@ import { toWei } from "@/plugins/web3Utils";
 
 BigNumber.config({ POW_PRECISION: 1000 });
 
+const WEI_PER_ETHER = new BigNumber(10).pow(18);
+
 function maxAllo(target_apr_dec, signalledTokens, networkStore, stakedTokens){
   let target_apr = new BigNumber(target_apr_dec).dividedBy(100);
 
@@ -13,7 +15,7 @@ function maxAllo(target_apr_dec, signalledTokens, networkStore, stakedTokens){
         .multipliedBy(networkStore.getIssuancePerYear)
         .dividedBy(target_apr)
         .minus(stakedTokens)
-        .dividedBy(new BigNumber(10).pow(18));
+        .dividedBy(WEI_PER_ETHER);
   }catch(e){
     return new BigNumber(0);
   }
@@ -23,17 +25,18 @@ function calculateApr(currentSignalledTokens, stakedTokens, networkStore){
   return calculateNewApr(currentSignalledTokens, stakedTokens, networkStore, "0");
 }
 
-function calculateNewApr(currentSignalledTokens, stakedTokens, networkStore, newAllocation){
-  if(new BigNumber(stakedTokens).plus(newAllocation) <= new BigNumber(0))
+function calculateNewApr(currentSignalledTokens, stakedTokens, networkStore, newAllocation, newAllocationWei){
+  const allocWei = newAllocationWei != null ? newAllocationWei : toWei(newAllocation);
+  if(new BigNumber(stakedTokens).plus(allocWei) <= new BigNumber(0))
     return new BigNumber(0);
-  
+
   try{
     // signalledTokens / totalTokensSignalled * issuancePerYear / (stakedTokens + newAllocation)
     return new BigNumber(currentSignalledTokens)
           .dividedBy(networkStore.getTotalTokensSignalled)
           .multipliedBy(networkStore.getIssuancePerYear)
           .dividedBy(
-              new BigNumber(stakedTokens).plus(toWei(newAllocation))
+              new BigNumber(stakedTokens).plus(allocWei)
           ).multipliedBy(100);
   }
   catch(e){
@@ -60,23 +63,24 @@ function calculateAllocationDailyRewards(signalledTokens, stakedTokens, allocate
   }
 }
 
-function calculateSubgraphDailyRewards(currentSignalledTokens, stakedTokens, networkStore, newAllocation){
+function calculateSubgraphDailyRewards(currentSignalledTokens, stakedTokens, networkStore, newAllocation, newAllocationWei){
   if(new BigNumber(stakedTokens) <= new BigNumber(0))
     return new BigNumber(0);
 
+  const allocWei = newAllocationWei != null ? newAllocationWei : toWei(newAllocation);
   try{
     return new BigNumber(currentSignalledTokens)
         .dividedBy(networkStore.getTotalTokensSignalled)
         .multipliedBy(networkStore.getIssuancePerBlock)
         .multipliedBy(6450)
         .multipliedBy(
-            new BigNumber(toWei(newAllocation)).dividedBy(new BigNumber(stakedTokens).plus(toWei(newAllocation)))
+            new BigNumber(allocWei).dividedBy(new BigNumber(stakedTokens).plus(allocWei))
         ).dp(0);
   }
   catch(e){
     return new BigNumber(0);
   }
-  
+
 }
 
 function calculateReadableDuration(seconds) {
@@ -93,7 +97,7 @@ function indexerCut(rewards, rewardCut){
 }
 
 function calculateAutoTargetApr(selectedSubgraphs, futureStakedTokens, networkStore, availableStakeWei, closingStakeWei, reserveGRT = '1') {
-  const reserveWei = new BigNumber(reserveGRT).multipliedBy(new BigNumber(10).pow(18));
+  const reserveWei = new BigNumber(reserveGRT).multipliedBy(WEI_PER_ETHER);
 
   // Build initial eligible set (non-denied, has signal)
   let eligible = [];

@@ -94,7 +94,7 @@ export const useDeploymentStatusStore = defineStore('deploymentStatusStore', {
     async fetchIndexerData(){
       return chainStore.getActiveChain.networkSubgraphClient.query({
         query: gql`query{
-          indexers(where: {allocationCount_gt: 0}) {
+          indexers(first: 50, orderBy: allocationCount, orderDirection: desc, where: {allocationCount_gt: 0}) {
             url
             account {
               id
@@ -129,12 +129,14 @@ export const useDeploymentStatusStore = defineStore('deploymentStatusStore', {
         promises.push(
           this.fetchStatus(this.indexerUrls[indexer])
           .then((json) => {
-            this.indexerStatuses[indexer] = json.data.indexingStatuses.reduce((obj, status) => {
-              return {
-                ...obj,
-                [status.subgraph]: status
-              };
-            }, {});
+            if(json?.data?.indexingStatuses){
+              this.indexerStatuses[indexer] = json.data.indexingStatuses.reduce((obj, status) => {
+                return {
+                  ...obj,
+                  [status.subgraph]: status
+                };
+              }, {});
+            }
           })
         );
       }
@@ -142,13 +144,17 @@ export const useDeploymentStatusStore = defineStore('deploymentStatusStore', {
     },
     async fetchStatus(indexerUrl){
       const url = new URL('/status', indexerUrl);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
       return fetch(url.href,  {
         method: "POST",
         headers: {"Content-type": "application/json"},
-        body: JSON.stringify({query: "{ indexingStatuses { subgraph synced health entityCount fatalError{ message deterministic block{ hash number } } node chains{ latestBlock{number} chainHeadBlock{number} earliestBlock{number} } } }"}),
+        body: JSON.stringify({query: "{ indexingStatuses { subgraph synced health entityCount fatalError{ message deterministic block{ number } } chains{ latestBlock{number} chainHeadBlock{number} } } }"}),
+        signal: controller.signal,
       })
-      .then((res) => res.json())
+      .then((res) => { clearTimeout(timeoutId); return res.json(); })
       .catch((error) => {
+        clearTimeout(timeoutId);
         console.error(`Deployment status query error: ${error.message}`);
       });
     },
