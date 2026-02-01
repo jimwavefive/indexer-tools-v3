@@ -23,13 +23,21 @@ export const loadDefaultsConfig = async () => {
     }else{
       value = {}
     }
-    
+
     if(import.meta.env.VITE_DEFAULT_ACCOUNTS){
       json = JSON.parse(import.meta.env.VITE_DEFAULT_ACCOUNTS);
     }else{
       json = "";
     }
 
+    let blacklistEntries = [];
+    try {
+      const blResp = await fetch('/blacklist.txt');
+      if (blResp.ok) {
+        const text = await blResp.text();
+        blacklistEntries = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+      }
+    } catch (e) { /* no file = empty list */ }
 
     return {
       variables: {
@@ -49,6 +57,7 @@ export const loadDefaultsConfig = async () => {
         qosSubgraph: value.DEFAULT_QOS_SUBGRAPH || import.meta.env.VITE_DEFAULT_QOS_SUBGRAPH || "https://gateway.thegraph.com/api/[api-key]/subgraphs/id/Dtr9rETvwokot4BSXaD5tECanXfqfJKcvHuaaEgPDD2D",
         apiKey: value.GRAPH_API_KEY || import.meta.env.VITE_GRAPH_API_KEY || "3bab348a7c385b1870039eb890fd0a5f",
         chainValidationRpcs: value.CHAIN_VALIDATION_RPCS || (import.meta.env.VITE_CHAIN_VALIDATION_RPCS ? JSON.parse(import.meta.env.VITE_CHAIN_VALIDATION_RPCS) : {}),
+        subgraphBlacklist: blacklistEntries,
       }
     }    
     

@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  indexer-tools:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./blacklist.txt:/app/config/blacklist.txt
+      - ./blacklist.txt:/app/dist/blacklist.txt
+    env_file:
+      - .env.test
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 5

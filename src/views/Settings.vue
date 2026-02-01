@@ -67,7 +67,18 @@
                 ></v-select>
                 <h3>Subgraph Sync List (Manual)</h3>
                 <v-textarea rows="3" v-model="subgraphSettingsStore.settings.subgraphSynclist"></v-textarea>
-                <h3>Subgraph Blacklist</h3>
+                <h3>Subgraph Blacklist (from file)</h3>
+                <v-textarea
+                  v-if="subgraphSettingsStore.fileBlacklist.length"
+                  rows="3"
+                  :model-value="subgraphSettingsStore.fileBlacklist.join('\n')"
+                  readonly
+                  variant="outlined"
+                  bg-color="grey-darken-3"
+                ></v-textarea>
+                <p v-if="subgraphSettingsStore.fileBlacklist.length" class="text-caption text-grey mb-4">Loaded from blacklist.txt ({{ subgraphSettingsStore.fileBlacklist.length }} entries)</p>
+                <p v-else class="text-caption text-grey mb-4">No blacklist file loaded</p>
+                <h3>Subgraph Blacklist (Manual)</h3>
                 <v-textarea rows="3" v-model="subgraphSettingsStore.settings.subgraphBlacklist"></v-textarea>
             </v-card-text>
             </v-card>
