@@ -51,6 +51,11 @@
       Reset Allos
     </v-btn>
   </div>
+  <TopPagination
+    v-model:items-per-page="itemsPerPage"
+    v-model:page="alloPage"
+    :total-items="newAllocationSetterStore.getSelectedSubgraphs.length"
+  />
   <v-data-table
       :headers="headers"
       :items="newAllocationSetterStore.getSelectedSubgraphs"
@@ -58,8 +63,10 @@
       class="elevation-1"
       :custom-sort="customSort"
       :footer-props="{
-        'items-per-page-options': [10, 15, 20, 25, 30, 40, 50]
+        'items-per-page-options': [10, 15, 20, 25, 30, 40, 50, 100]
       }"
+      v-model:items-per-page="itemsPerPage"
+      v-model:page="alloPage"
       mobile-breakpoint="0"
       show-expand
       :expanded="subgraphStore.selected"
@@ -159,9 +166,13 @@ import { ref, watch } from 'vue';
 import { useSubgraphsStore } from '@/store/subgraphs';
 import { useNewAllocationSetterStore } from '@/store/newAllocationSetter';
 import { storeToRefs } from 'pinia';
+import TopPagination from '@/components/TopPagination.vue';
 const subgraphStore = useSubgraphsStore();
 const newAllocationSetterStore = useNewAllocationSetterStore();
 newAllocationSetterStore.update();
+
+const itemsPerPage = ref(50);
+const alloPage = ref(1);
 
 
 const { newAllocations, getSelectedS, minAllocation, minAllocation0Signal, customPOIs } = storeToRefs(newAllocationSetterStore);

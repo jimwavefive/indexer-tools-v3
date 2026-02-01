@@ -9,7 +9,7 @@ const settingsDefault = {
   targetApr: '10',
   noRewardsFilter: 0,
   networkFilter: [],
-  activateBlacklist: false,
+  activateBlacklist: true,
   activateSynclist: false,
   statusFilter: 'none',
   automaticIndexingRewards: false,
@@ -22,7 +22,7 @@ const settingsDefault = {
     arbitrumSepolia: "",
   },
   chainValidationRpcs: {},
-  hideCurrentlyAllocated: false,
+  hideCurrentlyAllocated: true,
   hideZeroApr: false,
   queryFilters: {
     minSignal: '',

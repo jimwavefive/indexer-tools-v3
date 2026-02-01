@@ -10,7 +10,8 @@
       v-model="selected"
       v-model:sort-by="tableSettingsStore.allocationSettings.sortBy"
       v-model:loading="allocationStore.loadingAll"
-      v-model:items-per-page="tableSettingsStore.allocationSettings.itemsPerPage"
+      v-model:items-per-page="effectiveItemsPerPage"
+      v-model:page="allocationPage"
       hover
       no-data-text="No data available<br>"
   >
@@ -65,6 +66,11 @@
           class="d-inline-block"
         ></v-checkbox>
       </div>
+      <TopPagination
+        v-model:items-per-page="effectiveItemsPerPage"
+        v-model:page="allocationPage"
+        :total-items="allocationStore.getFilteredAllocations.length"
+      />
     </template>
     <template v-slot:item.deploymentStatus.blocksBehindChainhead="{ item }">
       <StatusDropdownVue :item='item' :subgraph='item.subgraphDeployment' :metadata='item.subgraphDeployment.versions[0].subgraph.metadata' />
@@ -277,7 +283,7 @@
 </template>
 
 <script setup>
-  import { ref, watch, onUnmounted } from "vue";
+  import { ref, computed, watch, onUnmounted } from "vue";
   import { format } from "date-fns";
   import numeral from "numeral";
   import { fromWei, toBN } from '@/plugins/web3Utils';
@@ -293,6 +299,7 @@
   import StatusDot from "@/components/StatusDot.vue";
   import { exportToCsv } from "@/plugins/csvExport";
   import { useAppStore } from "@/store/app";
+  import TopPagination from "@/components/TopPagination.vue";
 
   const allocationStore = useAllocationStore();
   const accountStore = useAccountStore();
@@ -302,14 +309,31 @@
   const chainValidationStore = useChainValidationStore();
   const { getActiveAccount } = storeToRefs(accountStore);
 
+  const allocationPage = ref(1);
   const { selected, loaded } = storeToRefs(allocationStore);
 
-  defineProps({
+  const props = defineProps({
     selectable: {
       type: Boolean,
       default: false,
     },
+    defaultItemsPerPage: {
+      type: Number,
+      default: null,
+    },
   })
+
+  const localItemsPerPage = ref(props.defaultItemsPerPage ?? tableSettingsStore.allocationSettings.itemsPerPage);
+  const effectiveItemsPerPage = computed({
+    get: () => props.defaultItemsPerPage != null ? localItemsPerPage.value : tableSettingsStore.allocationSettings.itemsPerPage,
+    set: (val) => {
+      if (props.defaultItemsPerPage != null) {
+        localItemsPerPage.value = val;
+      } else {
+        tableSettingsStore.allocationSettings.itemsPerPage = val;
+      }
+    }
+  });
 
   function resetFilters () {
     subgraphSettingsStore.settings.statusFilter = "none";

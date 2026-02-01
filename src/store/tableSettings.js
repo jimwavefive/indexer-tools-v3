@@ -8,14 +8,14 @@ export const useTableSettingStore = defineStore('tableSetting', {
         "key": "newApr",
         "order": "desc"
       }],
-      itemsPerPage: 50,
+      itemsPerPage: 100,
     },
     allocationSettings: localStorage.allocationTableSettings ? JSON.parse(localStorage.allocationTableSettings) : {
       sortBy: [{
         "key": "apr",
         "order": "asc"
       }],
-      itemsPerPage: 25,
+      itemsPerPage: 100,
     },
   }),
   getters: {

@@ -10,7 +10,8 @@
     v-model="selected"
     v-model:sort-by="tableSettingsStore.subgraphSettings.sortBy"
     v-model:loading="subgraphStore.loadingAll"
-    v-model:items-per-page="tableSettingsStore.subgraphSettings.itemsPerPage"
+    v-model:items-per-page="effectiveItemsPerPage"
+    v-model:page="subgraphPage"
     :search="search"
     hover
   >
@@ -148,6 +149,11 @@
             label="Hide 0% APR" density="compact" hide-details></v-checkbox>
         </v-col>
       </v-row>
+      <TopPagination
+        v-model:items-per-page="effectiveItemsPerPage"
+        v-model:page="subgraphPage"
+        :total-items="subgraphStore.getFilteredSubgraphs.length"
+      />
     </template>
     <template v-slot:item.deploymentStatus.blocksBehindChainhead="{ item }">
       <StatusDropdownVue :item='item' />
@@ -228,7 +234,7 @@
 </template>
 
 <script setup>
-  import { ref, watch, nextTick, onUnmounted } from 'vue';
+  import { ref, computed, watch, nextTick, onUnmounted } from 'vue';
   import { useSubgraphsStore } from '@/store/subgraphs';
   import { useSubgraphSettingStore } from '@/store/subgraphSettings';
   import { useNewAllocationSetterStore } from '@/store/newAllocationSetter';
@@ -238,12 +244,14 @@
   import { storeToRefs } from 'pinia';
   import { useTableSettingStore } from "@/store/tableSettings";
   import StatusDropdownVue from '@/components/StatusDropdown.vue';
+  import TopPagination from '@/components/TopPagination.vue';
   import { networks } from '@/plugins/subgraphNetworks';
   import { exportToCsv } from '@/plugins/csvExport';
   import { useAppStore } from '@/store/app';
 
 
   const search = ref('');
+  const subgraphPage = ref(1);
   const subgraphStore = useSubgraphsStore();
   const subgraphSettingStore = useSubgraphSettingStore();
   const tableSettingsStore = useTableSettingStore();
@@ -280,12 +288,28 @@
 
   const { selected } = storeToRefs(subgraphStore);
 
-  defineProps({
+  const props = defineProps({
     selectable: {
       type: Boolean,
       default: false,
     },
+    defaultItemsPerPage: {
+      type: Number,
+      default: null,
+    },
   })
+
+  const localItemsPerPage = ref(props.defaultItemsPerPage ?? tableSettingsStore.subgraphSettings.itemsPerPage);
+  const effectiveItemsPerPage = computed({
+    get: () => props.defaultItemsPerPage != null ? localItemsPerPage.value : tableSettingsStore.subgraphSettings.itemsPerPage,
+    set: (val) => {
+      if (props.defaultItemsPerPage != null) {
+        localItemsPerPage.value = val;
+      } else {
+        tableSettingsStore.subgraphSettings.itemsPerPage = val;
+      }
+    }
+  });
 
   function resetFilters () {
     search.value = "";
