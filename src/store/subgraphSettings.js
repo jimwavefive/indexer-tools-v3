@@ -21,6 +21,7 @@ const settingsDefault = {
     sepolia: "",
     arbitrumSepolia: "",
   },
+  chainValidationRpcs: {},
   hideCurrentlyAllocated: false,
   queryFilters: {
     minSignal: '',

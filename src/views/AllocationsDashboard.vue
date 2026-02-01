@@ -30,6 +30,13 @@
     </template>
     <template v-slot:top>
       <div class="d-block">
+        <v-btn
+          text="Export CSV"
+          prepend-icon="mdi-download"
+          class="d-inline-block mx-4 mt-5"
+          @click="exportAllocations"
+          variant="tonal"
+        ></v-btn>
         <v-select
             v-model="subgraphSettingsStore.settings.statusFilter"
             :items="[{title:'No Filter', value:'none'},{title:'All Reported Status', value:'all'},{title:'Closable', value:'closable'},{title: 'Healthy/Synced', value:'healthy-synced'},{title:'Syncing', value:'syncing'},{title:'Failed', value:'failed'},{title:'Non-Deterministic', value:'non-deterministic'},{title:'Deterministic', value:'deterministic'}]"
@@ -72,7 +79,7 @@
       <p style="width:100;max-width:100px;min-width:100px;overflow-x: scroll;">{{ item.id }}</p>
     </template>
     <template v-slot:item.allocatedTokens="{ item }">
-      {{ numeral(Web3.utils.fromWei(item.allocatedTokens.toString())).format('0,0') }} GRT
+      {{ numeral(fromWei(item.allocatedTokens.toString())).format('0,0') }} GRT
     </template>
     <template v-slot:item.createdAt="{ item }">
       <span :timestamp="item.createdAt">
@@ -84,7 +91,7 @@
             Epoch {{ item.createdAtEpoch }}
             </span>
           </template>
-          <span>{{ moment(item.createdAt + "000", "x").format("MMM D, YYYY HH:mm") }}</span>
+          <span>{{ format(new Date(Number(item.createdAt) * 1000), "MMM d, yyyy HH:mm") }}</span>
         </v-tooltip>
       </span>
     </template>
@@ -103,16 +110,16 @@
       </span>
     </template>
     <template v-slot:item.subgraphDeployment.signalledTokens="{ item }">
-      {{ numeral(Web3.utils.fromWei(item.subgraphDeployment.signalledTokens.toString())).format('0,0') }} GRT
+      {{ numeral(fromWei(item.subgraphDeployment.signalledTokens.toString())).format('0,0') }} GRT
     </template>
     <template v-slot:item.subgraphDeployment.indexingRewardAmount="{ item }">
-      {{ numeral(Web3.utils.fromWei(item.subgraphDeployment.indexingRewardAmount.toString())).format('0,0') }} GRT
+      {{ numeral(fromWei(item.subgraphDeployment.indexingRewardAmount.toString())).format('0,0') }} GRT
     </template>
     <template v-slot:item.subgraphDeployment.queryFeesAmount="{ item }">
-      {{ numeral(Web3.utils.fromWei(item.subgraphDeployment.queryFeesAmount.toString())).format('0,0') }} GRT
+      {{ numeral(fromWei(item.subgraphDeployment.queryFeesAmount.toString())).format('0,0') }} GRT
     </template>
     <template v-slot:item.subgraphDeployment.stakedTokens="{ item }">
-      {{ numeral(Web3.utils.fromWei(item.subgraphDeployment.stakedTokens.toString())).format('0,0') }} GRT
+      {{ numeral(fromWei(item.subgraphDeployment.stakedTokens.toString())).format('0,0') }} GRT
     </template>
     <template v-slot:item.proportion="{ item }">
       {{ numeral(item.proportion).format('0,0.0000') }}
@@ -121,10 +128,10 @@
       {{ numeral(item.apr).format('0,0.00') }}%
     </template>
     <template v-slot:item.dailyRewards="{ item }">
-      {{ numeral(Web3.utils.fromWei(Web3.utils.toBN(item.dailyRewards))).format('0,0') }} GRT
+      {{ numeral(fromWei(toBN(item.dailyRewards))).format('0,0') }} GRT
     </template>
     <template v-slot:item.dailyRewardsCut="{ item }">
-      {{ numeral(Web3.utils.fromWei(Web3.utils.toBN(item.dailyRewardsCut))).format('0,0') }} GRT
+      {{ numeral(fromWei(toBN(item.dailyRewardsCut))).format('0,0') }} GRT
     </template>
     <template v-slot:item.pendingRewards.value="{ item }">
       <span
@@ -144,7 +151,7 @@
        class="d-flex"
       >
         <span>
-        {{ numeral(Web3.utils.fromWei(Web3.utils.toBN(item.pendingRewards.value))).format('0,0') }} GRT
+        {{ numeral(fromWei(toBN(item.pendingRewards.value))).format('0,0') }} GRT
       </span>
       <v-tooltip
           location="top"
@@ -178,7 +185,7 @@
        class="d-flex"
       >
         <span>
-          {{ numeral(Web3.utils.fromWei(Web3.utils.toBN(item.pendingRewardsCut))).format('0,0') }} GRT
+          {{ numeral(fromWei(toBN(item.pendingRewardsCut))).format('0,0') }} GRT
       </span>
       <v-tooltip
           location="top"
@@ -253,16 +260,16 @@
           <strong>{{ numeral(allocationStore.avgAPR).format('0,0.00%') }}</strong>&nbsp;&nbsp;
         </template>
         <template v-slot:dailyRewards>
-          <strong>{{ numeral(Web3.utils.fromWei(Web3.utils.toBN(allocationStore.dailyRewardsSum))).format('0,0') }} GRT&nbsp;&nbsp;</strong>
+          <strong>{{ numeral(fromWei(toBN(allocationStore.dailyRewardsSum))).format('0,0') }} GRT&nbsp;&nbsp;</strong>
         </template>
         <template v-slot:dailyRewardsCut>
-          <strong>{{ numeral(Web3.utils.fromWei(Web3.utils.toBN(allocationStore.dailyRewardsCutSum))).format('0,0') }} GRT&nbsp;&nbsp;</strong>
+          <strong>{{ numeral(fromWei(toBN(allocationStore.dailyRewardsCutSum))).format('0,0') }} GRT&nbsp;&nbsp;</strong>
         </template>
         <template v-slot:pendingRewards.value>
-          <strong>{{ numeral(Web3.utils.fromWei(Web3.utils.toBN(allocationStore.pendingRewardsSum))).format('0,0') }} GRT&nbsp;&nbsp;</strong>
+          <strong>{{ numeral(fromWei(toBN(allocationStore.pendingRewardsSum))).format('0,0') }} GRT&nbsp;&nbsp;</strong>
         </template>
         <template v-slot:pendingRewardsCut>
-          <strong>{{ numeral(Web3.utils.fromWei(Web3.utils.toBN(allocationStore.pendingRewardsCutSum))).format('0,0') }} GRT</strong>
+          <strong>{{ numeral(fromWei(toBN(allocationStore.pendingRewardsCutSum))).format('0,0') }} GRT</strong>
         </template>
       </DashboardFooter>
     </template>
@@ -270,10 +277,10 @@
 </template>
 
 <script setup>
-  import { ref, watch } from "vue";
-  import moment from "moment";
+  import { ref, watch, onUnmounted } from "vue";
+  import { format } from "date-fns";
   import numeral from "numeral";
-  import Web3 from "web3";
+  import { fromWei, toBN } from '@/plugins/web3Utils';
   import { useAllocationStore } from "@/store/allocations";
   import { useAccountStore } from "@/store/accounts";
   import { storeToRefs } from "pinia";
@@ -284,6 +291,8 @@
   import DashboardFooter from "@/components/DashboardFooter.vue";
   import { useChainValidationStore } from "@/store/chainValidation";
   import StatusDot from "@/components/StatusDot.vue";
+  import { exportToCsv } from "@/plugins/csvExport";
+  import { useAppStore } from "@/store/app";
 
   const allocationStore = useAllocationStore();
   const accountStore = useAccountStore();
@@ -314,13 +323,35 @@
       allocationStore.fetchAllPendingRewards();
   })
   watch(getActiveAccount,  async (newAccount, oldAccount) => {
-    console.log(newAccount);
-    console.log(oldAccount);
     allocationStore.loaded = false;
     allocationStore.loading = false;
     if(newAccount.address != oldAccount.address || newAccount.chain != oldAccount.chain)
       allocationStore.fetchData();
   });
+
+  function exportAllocations() {
+    exportToCsv(
+      subgraphSettingsStore.settings.selectedAllocationColumns,
+      allocationStore.getFilteredAllocations,
+      'allocations.csv'
+    );
+  }
+
+  const appStore = useAppStore();
+  let autoRefreshTimer = null;
+
+  function setupAutoRefresh() {
+    if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+    if (appStore.autoRefreshInterval > 0) {
+      autoRefreshTimer = setInterval(() => {
+        allocationStore.fetchData();
+      }, appStore.autoRefreshInterval);
+    }
+  }
+
+  watch(() => appStore.autoRefreshInterval, setupAutoRefresh);
+  setupAutoRefresh();
+  onUnmounted(() => { if (autoRefreshTimer) clearInterval(autoRefreshTimer); });
 
   allocationStore.init();
 </script>

@@ -93,8 +93,6 @@ export const useChainStore = defineStore('chainStore', {
   actions: {
     setChain(id){
       let oldChain = this.getActiveChain;
-      console.log(id);
-      console.log(this.chains.map((c) => c.id));
       let newChain = this.chains.find(chain => chain.id == id);
       if(newChain && newChain != oldChain){
         newChain.active = true;

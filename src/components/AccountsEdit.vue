@@ -60,7 +60,6 @@
   const { getAccounts } = storeToRefs(accountStore);
 
   watch(getAccounts,  () => {
-    console.log("UPDATE!!!");
     accountStore.saveAccounts();
   }, { deep: true });
 </script>

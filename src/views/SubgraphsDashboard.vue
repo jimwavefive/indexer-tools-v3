@@ -31,6 +31,7 @@
     <template v-slot:top>
       <div class="d-flex align-content-center">
         <v-btn text="Refresh Subgraphs" prepend-icon="mdi-refresh" @click="subgraphStore.refreshSubgraphs()" class="mx-5 my-6" stacked></v-btn>
+        <v-btn text="Export CSV" prepend-icon="mdi-download" @click="exportSubgraphs" class="mx-2 my-6" variant="tonal" stacked></v-btn>
         <div class="d-flex align-content-center align-center">
           <v-expansion-panels class="">
             <v-expansion-panel
@@ -165,7 +166,7 @@
       <StatusDropdownVue :item='item' />
     </template>
     <template v-slot:item.deployment.createdAt="{ item }">
-      <span :timestamp="item.deployment.createdAt">{{ moment(item.deployment.createdAt + "000", "x").format("MMM D, YYYY HH:mm") }}</span>
+      <span :timestamp="item.deployment.createdAt">{{ format(new Date(Number(item.deployment.createdAt) * 1000), "MMM d, yyyy HH:mm") }}</span>
     </template>
     <template v-slot:item.proportion="{ item }">
       {{ numeral(item.proportion).format('0,0.0000') }}
@@ -181,19 +182,19 @@
       <span v-if="item.maxAllo == Number.MIN_SAFE_INTEGER">-</span>
     </template>
     <template v-slot:item.dailyRewards="{ item }">
-      {{ numeral(web3.utils.fromWei(web3.utils.toBN(item.dailyRewards))).format('0,0') }} GRT
+      {{ numeral(fromWei(toBN(item.dailyRewards))).format('0,0') }} GRT
     </template>
     <template v-slot:item.dailyRewardsCut="{ item }">
-      {{ numeral(web3.utils.fromWei(web3.utils.toBN(item.dailyRewardsCut))).format('0,0') }} GRT
+      {{ numeral(fromWei(toBN(item.dailyRewardsCut))).format('0,0') }} GRT
     </template>
     <template v-slot:item.deployment.signalledTokens="{ item }">
-      {{ numeral(web3.utils.fromWei(item.deployment.signalledTokens.toString())).format('0,0') }} GRT
+      {{ numeral(fromWei(item.deployment.signalledTokens.toString())).format('0,0') }} GRT
     </template>
     <template v-slot:item.deployment.indexingRewardAmount="{ item }">
-      {{ numeral(web3.utils.fromWei(item.deployment.indexingRewardAmount.toString())).format('0,0') }} GRT
+      {{ numeral(fromWei(item.deployment.indexingRewardAmount.toString())).format('0,0') }} GRT
     </template>
     <template v-slot:item.deployment.queryFeesAmount="{ item }">
-      {{ numeral(web3.utils.fromWei(item.deployment.queryFeesAmount.toString())).format('0,0') }} GRT
+      {{ numeral(fromWei(item.deployment.queryFeesAmount.toString())).format('0,0') }} GRT
     </template>
     <template v-slot:item.queryFees.query_count="{ item }">
       {{ item.queryFees?.query_count ? numeral(item.queryFees.query_count).format('0,0') : '-' }}
@@ -211,7 +212,7 @@
       {{ numeral(item.queryFees?.gateway_query_success_rate).format('0.00%') }}
     </template>
     <template v-slot:item.deployment.stakedTokens="{ item }">
-      {{ numeral(web3.utils.fromWei(item.deployment.stakedTokens.toString())).format('0,0') }} GRT
+      {{ numeral(fromWei(item.deployment.stakedTokens.toString())).format('0,0') }} GRT
     </template>
     <template v-slot:item.deployment.manifest.network="{ item }">
       {{ item.deployment.manifest.network ? item.deployment.manifest.network : "null" }}
@@ -240,16 +241,18 @@
 </template>
 
 <script setup>
-  import { ref } from 'vue';
+  import { ref, watch, onUnmounted } from 'vue';
   import { useSubgraphsStore } from '@/store/subgraphs';
   import { useSubgraphSettingStore } from '@/store/subgraphSettings';
   import numeral from 'numeral';
-  import web3 from 'web3';
-  import moment from 'moment';
+  import { fromWei, toBN } from '@/plugins/web3Utils';
+  import { format } from 'date-fns';
   import { storeToRefs } from 'pinia';
   import { useTableSettingStore } from "@/store/tableSettings";
   import StatusDropdownVue from '@/components/StatusDropdown.vue';
   import { networks } from '@/plugins/subgraphNetworks';
+  import { exportToCsv } from '@/plugins/csvExport';
+  import { useAppStore } from '@/store/app';
 
 
   const search = ref('');
@@ -279,6 +282,28 @@
     subgraphSettingStore.settings.hideCurrentlyAllocated = false;
   }
 
+  function exportSubgraphs() {
+    exportToCsv(
+      subgraphSettingStore.settings.selectedSubgraphColumns,
+      subgraphStore.getFilteredSubgraphs,
+      'subgraphs.csv'
+    );
+  }
 
+  const appStore = useAppStore();
+  let autoRefreshTimer = null;
+
+  function setupAutoRefresh() {
+    if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+    if (appStore.autoRefreshInterval > 0) {
+      autoRefreshTimer = setInterval(() => {
+        subgraphStore.refreshSubgraphs();
+      }, appStore.autoRefreshInterval);
+    }
+  }
+
+  watch(() => appStore.autoRefreshInterval, setupAutoRefresh);
+  setupAutoRefresh();
+  onUnmounted(() => { if (autoRefreshTimer) clearInterval(autoRefreshTimer); });
 
 </script>

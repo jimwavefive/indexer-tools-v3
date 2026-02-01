@@ -115,6 +115,13 @@
         Settings
       </v-btn>
     </div>
+    <v-btn
+      icon
+      variant="text"
+      @click="toggleTheme"
+    >
+      <v-icon>{{ appStore.theme === 'dark' ? 'mdi-weather-sunny' : 'mdi-weather-night' }}</v-icon>
+    </v-btn>
     <accounts-dropdown></accounts-dropdown>
   </v-app-bar>
   <v-navigation-drawer
@@ -141,11 +148,20 @@
   import { useSubgraphsStore } from '@/store/subgraphs';
   import { useAllocationStore } from '@/store/allocations';
   import { useChainStore } from '@/store/chains';
+  import { useAppStore } from '@/store/app';
   import { ref } from 'vue';
+  import { useTheme } from 'vuetify';
   const chainStore = useChainStore();
   const networkStore = useNetworkStore();
   const subgraphStore = useSubgraphsStore();
   const allocationStore = useAllocationStore();
+  const appStore = useAppStore();
+  const theme = useTheme();
+
+  function toggleTheme() {
+    appStore.toggleTheme();
+    theme.global.name.value = appStore.theme;
+  }
   const drawer = ref(false);
 
   function updateChain(id){
