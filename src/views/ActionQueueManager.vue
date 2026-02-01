@@ -105,19 +105,19 @@
       </v-badge>
     </template>
     <template v-slot:item.deployment.createdAt="{ item }">
-      <span :timestamp="item.deployment.createdAt">{{ moment(item.deployment.createdAt + "000", "x").format("MMM D, YYYY HH:mm") }}</span>
+      <span :timestamp="item.deployment.createdAt">{{ format(new Date(Number(item.deployment.createdAt) * 1000), "MMM d, yyyy HH:mm") }}</span>
     </template>
     <template v-slot:item.deployment.signalledTokens="{ item }">
-      {{ numeral(Web3.utils.fromWei(item.deployment.signalledTokens)).format('0,0') }} GRT
+      {{ numeral(fromWei(item.deployment.signalledTokens)).format('0,0') }} GRT
     </template>
     <template v-slot:item.deployment.indexingRewardAmount="{ item }">
-      {{ numeral(Web3.utils.fromWei(item.deployment.indexingRewardAmount)).format('0,0') }} GRT
+      {{ numeral(fromWei(item.deployment.indexingRewardAmount)).format('0,0') }} GRT
     </template>
     <template v-slot:item.deployment.queryFeesAmount="{ item }">
-      {{ numeral(Web3.utils.fromWei(item.deployment.queryFeesAmount)).format('0,0') }} GRT
+      {{ numeral(fromWei(item.deployment.queryFeesAmount)).format('0,0') }} GRT
     </template>
     <template v-slot:item.deployment.stakedTokens="{ item }">
-      {{ numeral(Web3.utils.fromWei(item.deployment.stakedTokens)).format('0,0') }} GRT
+      {{ numeral(fromWei(item.deployment.stakedTokens)).format('0,0') }} GRT
     </template>
     <template v-slot:item.proportion="{ item }">
       {{ numeral(item.proportion).format('0,0.000%') }}
@@ -132,10 +132,10 @@
       {{ numeral(item.newApr.toString()).format('0,0.00') }}%
     </template>
     <template v-slot:item.dailyRewards="{ item }">
-      {{ numeral(Web3.utils.fromWei(Web3.utils.toBN(item.dailyRewards))).format('0,0') }} GRT
+      {{ numeral(fromWei(toBN(item.dailyRewards))).format('0,0') }} GRT
     </template>
     <template v-slot:item.dailyRewardsCut="{ item }">
-      {{ numeral(Web3.utils.fromWei(Web3.utils.toBN(item.dailyRewardsCut))).format('0,0') }} GRT
+      {{ numeral(fromWei(toBN(item.dailyRewardsCut))).format('0,0') }} GRT
     </template>
   </v-data-table>
   <br>
@@ -270,8 +270,8 @@
 </template>
 
 <script setup>
-import moment from 'moment';
-import Web3 from 'web3';
+import { format } from 'date-fns';
+import { fromWei, toBN } from '@/plugins/web3Utils';
 import numeral from 'numeral';
 import { ref, watch, computed } from 'vue';
 import { useSubgraphsStore } from '@/store/subgraphs';
@@ -363,16 +363,10 @@ async function batchSendActions(actions){
 
 function sendActionsToAgent(){
   batchSendActions(newAllocationSetterStore.actionsQueueBuildAPIObject).catch((errors) => {
-    console.log("Action Queue Errors:")
-    for(let i in errors){
-      console.log(errors[i]);
-    }
     actionErrors.value = actionErrors.value.concat(errors);
     text.value = 'Indexer Agent error. Check errors for details.'
     snackbar.value = true;
   }).then((data) => {
-    console.log("AGENT CONNECT SEND ACTIONS DATA");
-    console.log(data);
     text.value = `Queued ${data.reduce((n, currentBatch) => n + currentBatch.data.queueActions.length, 0)} actions`;
     snackbar.value = true;
     queryActions();
@@ -406,16 +400,10 @@ async function approveActions(){
     }`,
     variables: { actionIDs: selected.value.map(String) },
   }).catch((errors) => {
-    console.log("Approve Action Errors:")
-    for(let i in errors){
-      console.log(errors[i]);
-    }
     actionErrors.value = actionErrors.value.concat(errors);
     text.value = 'Indexer Agent error. Check errors for details.'
     snackbar.value = true;
   }).then((data) => {
-    console.log("Approve Action Data")
-    console.log(data);
     selected.value = [];
     for(let i = 0; i < data.data.approveActions.length; i++)
       actions.value = actions.value.map((e) => e.id == data.data.approveActions[i].id ? data.data.approveActions[i] : e);
@@ -457,15 +445,10 @@ async function deleteActions(){
     }`,
     variables: { actionIDs: selected.value.map(String) }
   }).catch((errors) => {
-    console.log("Delete Action Errors:")
-    for(let i in errors){
-      console.log(errors[i]);
-    }
     actionErrors.value = actionErrors.value.concat(errors);
     text.value = 'Indexer Agent error. Check errors for details.'
     snackbar.value = true;
   }).then((data) => {
-    console.log(data);
     for(let i = 0; i < selected.value.length; i++){
       actions.value = actions.value.filter((e) =>  e.id != selected.value[i]);
     }
@@ -507,19 +490,14 @@ async function cancelActions(){
     }`,
     variables: { actionIDs: selected.value.map(String) }
   }).catch((errors) => {
-    console.log("Cancel Action Errors:")
-    for(let i in errors){
-      console.log(errors[i]);
-    }
     actionErrors.value = actionErrors.value.concat(errors);
     text.value = 'Indexer Agent error. Check errors for details.'
     snackbar.value = true;
   }).then((data) => {
-    console.log(data);
     selected.value = [];
     for(let i = 0; i < data.data.cancelActions.length; i++)
       actions.value = actions.value.map((e) => e.id == data.data.cancelActions[i].id ? data.data.cancelActions[i] : e);
-    
+
     text.value = `Cancelled ${data.data.cancelActions.length} actions`
     snackbar.value = true;
 
@@ -559,8 +537,6 @@ async function queryActions(){
     variables: { filter: {  } },
     fetchPolicy: 'network-only',
   }).then((data) => {
-    console.log("AGENT CONNECT QUERY ACTIONS DATA");
-    console.log(data);
     actions.value = data.data.actions;
     loading.value = false;
     return data.data.actions;
@@ -591,15 +567,10 @@ async function executeApprovedActions(){
       }
     }`,
   }).catch((errors) => {
-    console.log("Execute Action Errors:")
-    for(let i in errors){
-      console.log(errors[i]);
-    }
     actionErrors.value = actionErrors.value.concat(errors);
     text.value = 'Indexer Agent error. Check errors for details.'
     snackbar.value = true;
   }).then((data) => {
-    console.log(data);
     selected.value = [];
     for(let i = 0; i < data.data.executeApprovedActions.length; i++){
       actions.value = actions.value.map((e) => e.id == data.data.executeApprovedActions[i].id ? data.data.executeApprovedActions[i] : e);

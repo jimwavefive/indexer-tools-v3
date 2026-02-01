@@ -3,10 +3,13 @@
     <default-bar />
 
     <default-view />
+
+    <notification-snackbar />
   </v-app>
 </template>
 
 <script setup>
   import DefaultBar from './AppBar.vue'
   import DefaultView from './View.vue'
+  import NotificationSnackbar from '@/components/NotificationSnackbar.vue'
 </script>

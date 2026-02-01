@@ -79,19 +79,19 @@
       </v-badge>
     </template>
     <template v-slot:item.deployment.createdAt="{ item }">
-      <span :timestamp="item.deployment.createdAt">{{ moment(item.deployment.createdAt + "000", "x").format("MMM D, YYYY HH:mm") }}</span>
+      <span :timestamp="item.deployment.createdAt">{{ format(new Date(Number(item.deployment.createdAt) * 1000), "MMM d, yyyy HH:mm") }}</span>
     </template>
     <template v-slot:item.deployment.signalledTokens="{ item }">
-      {{ numeral(Web3.utils.fromWei(item.deployment.signalledTokens)).format('0,0') }} GRT
+      {{ numeral(fromWei(item.deployment.signalledTokens)).format('0,0') }} GRT
     </template>
     <template v-slot:item.deployment.indexingRewardAmount="{ item }">
-      {{ numeral(Web3.utils.fromWei(item.deployment.indexingRewardAmount)).format('0,0') }} GRT
+      {{ numeral(fromWei(item.deployment.indexingRewardAmount)).format('0,0') }} GRT
     </template>
     <template v-slot:item.deployment.queryFeesAmount="{ item }">
-      {{ numeral(Web3.utils.fromWei(item.deployment.queryFeesAmount)).format('0,0') }} GRT
+      {{ numeral(fromWei(item.deployment.queryFeesAmount)).format('0,0') }} GRT
     </template>
     <template v-slot:item.deployment.stakedTokens="{ item }">
-      {{ numeral(Web3.utils.fromWei(item.deployment.stakedTokens)).format('0,0') }} GRT
+      {{ numeral(fromWei(item.deployment.stakedTokens)).format('0,0') }} GRT
     </template>
     <template v-slot:item.proportion="{ item }">
       {{ numeral(item.proportion).format('0,0.0000') }}
@@ -106,10 +106,10 @@
       {{ numeral(item.newApr.toString()).format('0,0.00') }}%
     </template>
     <template v-slot:item.dailyRewards="{ item }">
-      {{ numeral(Web3.utils.fromWei(Web3.utils.toBN(item.dailyRewards))).format('0,0') }} GRT
+      {{ numeral(fromWei(toBN(item.dailyRewards))).format('0,0') }} GRT
     </template>
     <template v-slot:item.dailyRewardsCut="{ item }">
-      {{ numeral(Web3.utils.fromWei(Web3.utils.toBN(item.dailyRewardsCut))).format('0,0') }} GRT
+      {{ numeral(fromWei(toBN(item.dailyRewardsCut))).format('0,0') }} GRT
     </template>
     <template v-slot:body.append>
 
@@ -117,11 +117,11 @@
     <template v-slot:expanded-row="{ item }">
       <tr>
         <td :colspan="5">
-            <!-- :max="parseInt(Web3.utils.fromWei(Web3.utils.toBN(calculatedAvailableStake))) + (newAllocationSizes[item.deployment.ipfsHash] ? newAllocationSizes[item.deployment.ipfsHash] : 0)" -->
+            <!-- :max="parseInt(fromWei(toBN(calculatedAvailableStake))) + (newAllocationSizes[item.deployment.ipfsHash] ? newAllocationSizes[item.deployment.ipfsHash] : 0)" -->
 
           <v-slider
               min="0"
-              :max="parseInt(Web3.utils.fromWei(Web3.utils.toBN(newAllocationSetterStore.calculatedAvailableStake))) + parseFloat(newAllocations[item.deployment.ipfsHash])"
+              :max="parseInt(fromWei(toBN(newAllocationSetterStore.calculatedAvailableStake))) + parseFloat(newAllocations[item.deployment.ipfsHash])"
               v-model="newAllocations[item.deployment.ipfsHash]"
               style="max-width: 500px; min-width:100px;"
               class="mt-4"
@@ -152,8 +152,8 @@
 </template>
 
 <script setup>
-import moment from 'moment';
-import Web3 from 'web3';
+import { format } from 'date-fns';
+import { fromWei, toBN } from '@/plugins/web3Utils';
 import numeral from 'numeral';
 import { ref, watch } from 'vue';
 import { useSubgraphsStore } from '@/store/subgraphs';

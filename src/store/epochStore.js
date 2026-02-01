@@ -11,9 +11,7 @@ export const useEpochStore = defineStore('epochStore', {
     chains: [],
     loading: false,
     loaded: false,
-    loadingPromise: new Promise(() => {
-      console.log("Promising");
-    }),
+    loadingPromise: new Promise(() => {}),
   }),
   getters: {
     getCurrentEpoch: (state) => state.currentEpoch,

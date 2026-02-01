@@ -104,7 +104,6 @@
   async function getStatus(){
     loading.value = true;
     const url = new URL(statusUrl.value);
-    console.log(url.href);
     await subgraphStore.fetchData();
     fetch(url.href,  {
       method: "POST",
@@ -114,8 +113,6 @@
     })
     .then((res) => res.json())
     .then((json) => {
-      console.log("SAVING STATUS")
-      console.log(json);
       deploymentStatuses.value = [];
       for(let i = 0; i < json.data.indexingStatuses.length; i++){
         deploymentStatuses.value[i] = { deploymentStatus: json.data.indexingStatuses[i]};
@@ -140,7 +137,6 @@
         deploymentStatuses.value[i].deployment = subgraphStore.getDataDict[deploymentStatuses.value[i].deploymentStatus.subgraph]?.deployment;
         deploymentStatuses.value[i].deploymentStatus.completion = numeral((deploymentStatuses.value[i].deploymentStatus.chains?.[0]?.latestBlock?.number - deploymentStatuses.value[i].deploymentStatus.chains?.[0]?.earliestBlock?.number) / (deploymentStatuses.value[i].deploymentStatus.chains?.[0]?.chainHeadBlock?.number - deploymentStatuses.value[i].deploymentStatus.chains?.[0]?.earliestBlock?.number)).format('0.00%') || '-%';
       }
-      console.log(deploymentStatuses);
       loading.value = false;
     }).catch((error) => {
       console.error(error);

@@ -11,18 +11,15 @@
   const managerSettingStore = useManagerSettingStore();
 
   subgraphSettingsStore.$subscribe(() => {
-    console.log('subgraph settings changed, saving!');
     localStorage.subgraphSettings = JSON.stringify(subgraphSettingsStore.settings);
   })
 
   tableSettingsStore.$subscribe(() => {
-    console.log('table settings changed, saving!');
     localStorage.subgraphTableSettings = JSON.stringify(tableSettingsStore.subgraphSettings);
     localStorage.allocationTableSettings = JSON.stringify(tableSettingsStore.allocationSettings);
   })
-  
+
   managerSettingStore.$subscribe(() => {
-    console.log('manager settings changed, saving!');
     localStorage.managerSettings = JSON.stringify(managerSettingStore.settings);
   })
 

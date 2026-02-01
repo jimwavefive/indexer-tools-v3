@@ -4,7 +4,7 @@ import { useNetworkStore } from './network';
 import { useAccountStore } from './accounts';
 import { useAllocationStore } from './allocations';
 import BigNumber from 'bignumber.js';
-import Web3 from 'web3';
+import { toWei } from '@/plugins/web3Utils';
 import { calculateNewApr, calculateSubgraphDailyRewards, maxAllo, indexerCut } from '@/plugins/commonCalcs';
 import { useChainStore } from './chains';
 const subgraphStore = useSubgraphsStore();
@@ -69,10 +69,7 @@ export const useNewAllocationSetterStore = defineStore('allocationSetter', {
       let proportions = [];
       for(let i = 0; i < state.getSelectedS.length; i++){
         let subgraph = state.getSelectedS[i];
-        console.log("FUTURE STAKED TOKENS");
-        console.log(state.getFutureStakedTokens[i].futureStakedTokens.toString());
         const newAllocation = state.newAllocations[subgraph.deployment.ipfsHash] ? state.newAllocations[subgraph.deployment.ipfsHash] : 0;
-        console.log(newAllocation);
         if(state.getFutureStakedTokens[i].futureStakedTokens.plus(new BigNumber(newAllocation*10**18)) > 0)
             proportions[i] = { newProportion: ( subgraph.deployment.signalledTokens / networkStore.getTotalTokensSignalled ) / ( state.getFutureStakedTokens[i].futureStakedTokens.plus(new BigNumber(newAllocation*10**18)) / networkStore.getTotalTokensAllocated ) };
           else
@@ -112,7 +109,6 @@ export const useNewAllocationSetterStore = defineStore('allocationSetter', {
       for(let i in state.getSelectedS){
         if(state.newAllocations[state.getSelectedS[i].deployment.ipfsHash])
           total += parseInt(state.newAllocations[state.getSelectedS[i].deployment.ipfsHash]);
-        console.log(total);
       }
       return total;
     },
@@ -125,7 +121,7 @@ export const useNewAllocationSetterStore = defineStore('allocationSetter', {
     calculatedAvailableStake: (state) => {
       let calc = BigNumber(state.availableStake)
         .plus(allocationStore.calculatedClosingStake)
-        .minus(Web3.utils.toWei(state.calculatedOpeningStake.toString()))
+        .minus(toWei(state.calculatedOpeningStake.toString()))
         .integerValue(BigNumber.ROUND_FLOOR);
       if(calc.toString() != "NaN")
         return calc
@@ -241,9 +237,6 @@ export const useNewAllocationSetterStore = defineStore('allocationSetter', {
       for(const i in allocationStore.getSelectedAllocations){
         let allo = {};
         if(subgraphStore.selected.includes(allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash)){
-          //console.log("CHECK");
-          //console.log(BigNumber(allocationStore.getSelectedAllocations[i].allocatedTokens).dividedBy(10**18).toString());
-          //console.log(state.newAllocations[allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash]);
           if(BigNumber(allocationStore.getSelectedAllocations[i].allocatedTokens).dividedBy(10**18).gt(BigNumber(state.newAllocations[allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash]))){
             allo = {
               status: 'queued',

@@ -251,8 +251,6 @@ function offchainSync(ipfsHash){
     }`,
     variables: { rule: indexingRuleInput }
   }).then((data) => {
-    console.log("AGENT CONNECT DATA");
-    console.log(data);
     if(!data.data.errors){
       text.value = `${data.data.setIndexingRule.identifier.slice(0,7)}... added to offchain sync list`;
       snackbar.value = true;
@@ -276,8 +274,6 @@ function removeOffchainSync(ipfsHash){
     }`,
     variables: { identifier: indexingRuleIdentifier }
   }).then((data) => {
-    console.log("AGENT CONNECT DATA");
-    console.log(data);
     if(!data.data.errors){
       text.value = `Subgraph removed from offchain sync list`;
       snackbar.value = true;

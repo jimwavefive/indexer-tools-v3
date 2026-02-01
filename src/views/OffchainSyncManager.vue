@@ -181,8 +181,6 @@ async function addOffchainSync(ipfsHash){
     }`,
     variables: { rule: indexingRuleInput }
   }).then((data) => {
-    console.log("AGENT CONNECT DATA");
-    console.log(data);
     if(!data.data.errors){
       text.value = `${data.data.setIndexingRule.identifier.slice(0,7)}... added to offchain sync list`;
       snackbar.value = true;
@@ -212,8 +210,6 @@ async function removeOffchainSync(ipfsHash){
     }`,
     variables: { identifier: indexingRuleIdentifier }
   }).then((data) => {
-    console.log("AGENT CONNECT DATA");
-    console.log(data);
     if(!data.data.errors){
       text.value = `Subgraph removed from offchain sync list`;
       snackbar.value = true;
@@ -237,8 +233,6 @@ async function queryOffchainSyncs(){
     variables: { protocolNetwork: chainStore.getActiveChain.id },
     fetchPolicy: 'network-only',
   }).then((data) => {
-    console.log("AGENT CONNECT QUERY OFFCHAIN SYNC DATA");
-    console.log(data);
     const filteredSyncs = data.data.indexingRules.filter((r) => r.decisionBasis == 'offchain');
     offchainSyncs.value = filteredSyncs;
     loading.value = false;
