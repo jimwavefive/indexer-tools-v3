@@ -3,10 +3,16 @@ import { defineStore } from 'pinia'
 import { useAccountStore } from './accounts'
 import { useChainStore } from './chains';
 import { useEpochStore } from './epochStore';
+import { useSubgraphSettingStore } from './subgraphSettings';
+import { loadDefaultsConfig } from '@/plugins/defaultsConfig';
 import gql from 'graphql-tag';
 const accountStore = useAccountStore();
 const chainStore = useChainStore();
 const epochStore = useEpochStore();
+const subgraphSettingStore = useSubgraphSettingStore();
+
+const defaultsConfigVariables = await loadDefaultsConfig();
+const defaultsConfig = defaultsConfigVariables.variables;
 
 await epochStore.init();
 
@@ -16,6 +22,18 @@ const CHAIN_MAP = {
   "matic":"polygon",
   "mode-mainnet":"mode",
   "blast-mainnet":"blast",
+}
+
+function getRpcUrl(chain) {
+  // Priority: localStorage settings > runtime config > DRPC fallback
+  const settingsRpcs = subgraphSettingStore.settings.chainValidationRpcs || {};
+  if (settingsRpcs[chain]) return settingsRpcs[chain];
+
+  const defaultRpcs = defaultsConfig.chainValidationRpcs || {};
+  if (defaultRpcs[chain]) return defaultRpcs[chain];
+
+  // Fallback to DRPC
+  return `https://lb.drpc.org/ogrpc?network=${CHAIN_MAP[chain] || chain}&dkey=AgtfLeG1hEcCoP3Z3d3iRXjHXnqN8zkR74Ro-gTye0yN`;
 }
 
 export const useChainValidationStore = defineStore('chainValidationStore', {
@@ -54,7 +72,6 @@ export const useChainValidationStore = defineStore('chainValidationStore', {
 
 
       for(let i in this.getChains){
-        console.log(i);
         accountStore.getPOIQueryClient.query({
           query: gql`query blockHashFromNumber($network: String, $blockNumber: Int){ blockHashFromNumber(network: $network, blockNumber: $blockNumber) }`,
           variables: {
@@ -63,8 +80,6 @@ export const useChainValidationStore = defineStore('chainValidationStore', {
           },
         })
         .then(({ data, networkStatus }) => {
-          console.log("HASHDATA");
-          console.log(data);
           this.chainStatus[this.getChains[i]].indexerBlockHash = data.blockHashFromNumber;
           if(data.blockHashFromNumber != null){
             var myHeaders = new Headers();
@@ -87,19 +102,17 @@ export const useChainValidationStore = defineStore('chainValidationStore', {
               redirect: 'follow'
             };
 
-            fetch(`https://lb.drpc.org/ogrpc?network=${CHAIN_MAP[this.getChains[i]] || this.getChains[i]}&dkey=AgtfLeG1hEcCoP3Z3d3iRXjHXnqN8zkR74Ro-gTye0yN`, requestOptions)
+            fetch(getRpcUrl(this.getChains[i]), requestOptions)
               .then(response => response.text())
               .then(result => {
                 const res = JSON.parse(result);
-                console.log("RES123");
-                console.log(res)
                 this.chainStatus[this.getChains[i]].externalBlockHash = res.result.hash;
               })
-              .catch(error => console.log('error', error));
+              .catch(error => console.error('Chain validation error', error));
           }
         });
       }
-      
+
     },
     async update(){
       if(!this.loading){

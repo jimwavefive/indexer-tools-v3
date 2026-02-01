@@ -3,9 +3,11 @@ import gql from 'graphql-tag';
 import { qosSubgraphClient } from "@/plugins/qosSubgraphClient";
 import { useAccountStore } from './accounts';
 import { useChainStore } from './chains';
+import { useNotificationStore } from './notifications';
 
 const accountStore = useAccountStore();
 const chainStore = useChainStore();
+const notificationStore = useNotificationStore();
 
 const QOS_QUERY = gql`query queryDailyDataPoints($dayNumber: Int!, $indexer: String!){
   indexer(id: $indexer) {
@@ -45,7 +47,6 @@ export const useQosStore = defineStore('qosStore', {
   },
   actions: {
     async fetchData(){
-      console.log("QOS DATA");
       this.loading = true;
       if(chainStore.getActiveChain.id != "arbitrum-one"){
         this.loading = false;
@@ -60,8 +61,6 @@ export const useQosStore = defineStore('qosStore', {
         }`,
       })
       .then(({ data }) => {
-        console.log("DAY NUMBER");
-        console.log(data);
         return qosSubgraphClient.query({
           query: QOS_QUERY,
           variables: {
@@ -69,10 +68,7 @@ export const useQosStore = defineStore('qosStore', {
             indexer: accountStore.getActiveAccount.address,
           }
         }).then(({ data }) => {
-          console.log("QUERY QOS INDEXER");
-          console.log(data.indexer);
           this.qosData = data.indexer.allocationDailyDataPoints;
-          console.log(this.qosData);
           this.loading = false;
           return data.indexer.allocationDailyDataPoints;
         })
@@ -80,7 +76,7 @@ export const useQosStore = defineStore('qosStore', {
         this.loading = false;
         if(err.graphQLErrors?.[0]?.message){
           console.error(`QoS API error: ${err.graphQLErrors[0].message}`)
-          alert(`QoS API Error: ${err.graphQLErrors[0].message}`);
+          notificationStore.error(`QoS API Error: ${err.graphQLErrors[0].message}`);
         }
         if(err.message){
           console.error(`QoS query error: ${err.message}`);

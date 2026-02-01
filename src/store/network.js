@@ -1,11 +1,12 @@
 // Utilities
 import { defineStore } from 'pinia'
 import { useChainStore } from './chains';
+import { useNotificationStore } from './notifications';
 import gql from 'graphql-tag';
-import web3 from 'web3';
 import BigNumber from 'bignumber.js';
 
 const chainStore = useChainStore();
+const notificationStore = useNotificationStore();
 
 export const useNetworkStore = defineStore('network', {
   state: () => ({
@@ -72,7 +73,6 @@ export const useNetworkStore = defineStore('network', {
           }
         }`,
       }).then((data) => {
-        console.log(data);
         this.networks[chain.id].totalTokensSignalled = data.data.graphNetwork.totalTokensSignalled;
         this.networks[chain.id].issuancePerBlock = data.data.graphNetwork.networkGRTIssuancePerBlock;
         this.networks[chain.id].totalSupply = data.data.graphNetwork.totalSupply;
@@ -85,14 +85,14 @@ export const useNetworkStore = defineStore('network', {
         if(err.graphQLErrors[0]?.message){
           console.error(`Network API error: ${err.graphQLErrors[0].message}`);
           if(!this.networks[chain.id].error){
-            alert(`Network API Error: ${err.graphQLErrors[0].message}`);
+            notificationStore.error(`Network API Error: ${err.graphQLErrors[0].message}`);
             this.networks[chain.id].error = true;
           }
         }
         if(err.message){
           console.error(`Network query error: ${err.message}`);
           if(!this.networks[chain.id].error){
-            alert(`Network Error: ${err.message}`);
+            notificationStore.error(`Network Error: ${err.message}`);
             this.networks[chain.id].error = true
           }
         }

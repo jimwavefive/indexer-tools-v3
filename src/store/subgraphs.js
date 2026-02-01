@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
-
+import { useNotificationStore } from './notifications';
+import { applyStatusFilter } from '@/plugins/statusFilters';
 import gql from 'graphql-tag';
-import Web3 from 'web3';
-const BN = Web3.utils.BN;
+import { toWei } from '@/plugins/web3Utils';
 import { useNetworkStore } from './network';
 import { useAccountStore } from './accounts';
 import { useSubgraphSettingStore } from './subgraphSettings';
@@ -23,6 +23,7 @@ import BigNumber from "bignumber.js";
 import { calculateNewApr, calculateSubgraphDailyRewards, maxAllo, indexerCut } from '@/plugins/commonCalcs';
 import { upgradeIndexerClient } from '@/plugins/upgradeIndexerClient';
 
+const notificationStore = useNotificationStore();
 const { getDeploymentStatuses } = storeToRefs(deploymentStatusStore);
 
 const SUBGRAPH_QUERY = gql`query subgraphDeploymentManifests($cursor: String!, $minSignal: String!, $networks: [String]){
@@ -145,75 +146,22 @@ export const useSubgraphsStore = defineStore({
 
       if(parseInt(subgraphSettingStore.settings.maxSignal)){
         subgraphs = subgraphs.filter((i) => {
-          return BigNumber(i.deployment.signalledTokens).isLessThanOrEqualTo(new BigNumber(Web3.utils.toWei(subgraphSettingStore.settings.maxSignal)));
+          return BigNumber(i.deployment.signalledTokens).isLessThanOrEqualTo(new BigNumber(toWei(subgraphSettingStore.settings.maxSignal)));
         });
       }
 
       if(parseInt(subgraphSettingStore.settings.minSignal)){
         subgraphs = subgraphs.filter((i) => {
-          return BigNumber(i.deployment.signalledTokens).isGreaterThanOrEqualTo(new BigNumber(Web3.utils.toWei(subgraphSettingStore.settings.minSignal)));
+          return BigNumber(i.deployment.signalledTokens).isGreaterThanOrEqualTo(new BigNumber(toWei(subgraphSettingStore.settings.minSignal)));
         });
       }
 
-      if(subgraphSettingStore.settings.statusFilter == 'all'){
-        subgraphs = subgraphs.filter((i) => {
-          return deploymentStatusStore.getDeploymentStatuses[i.deployment.ipfsHash] != undefined;
-        });
-      }
-
-      if(subgraphSettingStore.settings.statusFilter == 'closable'){
-        subgraphs = subgraphs.filter((i) => {
-          const status = deploymentStatusStore.getDeploymentStatuses[i.deployment.ipfsHash];
-          if(status != undefined && status.synced == true && (status.fatalError == undefined || status.fatalError.deterministic == true))
-            return true
-          return false;
-        });
-      }
-
-      if(subgraphSettingStore.settings.statusFilter == 'healthy-synced'){
-        subgraphs = subgraphs.filter((i) => {
-          const status = deploymentStatusStore.getDeploymentStatuses[i.deployment.ipfsHash];
-          if(status != undefined && status.health == 'healthy' && status.synced == true)
-            return true
-          return false;
-        });
-      }
-
-      if(subgraphSettingStore.settings.statusFilter == 'syncing'){
-        subgraphs = subgraphs.filter((i) => {
-          const status = deploymentStatusStore.getDeploymentStatuses[i.deployment.ipfsHash];
-          if(status != undefined && status.health == 'healthy' && status.synced == false)
-            return true
-          return false;
-        });
-      }
-
-      if(subgraphSettingStore.settings.statusFilter == 'failed'){
-        subgraphs = subgraphs.filter((i) => {
-          const status = deploymentStatusStore.getDeploymentStatuses[i.deployment.ipfsHash];
-          if(status != undefined && status.health == 'failed')
-            return true
-          return false;
-        });
-      }
-
-      if(subgraphSettingStore.settings.statusFilter == 'non-deterministic'){
-        subgraphs = subgraphs.filter((i) => {
-          const status = deploymentStatusStore.getDeploymentStatuses[i.deployment.ipfsHash];
-          if(status != undefined && status.health == 'failed' && status.fatalError != undefined && status.fatalError.deterministic == false)
-            return true
-          return false;
-        });
-      }
-
-      if(subgraphSettingStore.settings.statusFilter == 'deterministic'){
-        subgraphs = subgraphs.filter((i) => {
-          const status = deploymentStatusStore.getDeploymentStatuses[i.deployment.ipfsHash];
-          if(status != undefined && status.health == 'failed' && status.fatalError != undefined && status.fatalError.deterministic == true)
-            return true
-          return false;
-        });
-      }
+      subgraphs = applyStatusFilter(
+        subgraphs,
+        subgraphSettingStore.settings.statusFilter,
+        deploymentStatusStore.getDeploymentStatuses,
+        (i) => i.deployment.ipfsHash
+      );
 
       if(subgraphSettingStore.settings.hideCurrentlyAllocated == true){
         subgraphs = subgraphs.filter((i) => {
@@ -476,9 +424,7 @@ export const useSubgraphsStore = defineStore({
           }
         })
         .then((data) => {
-          console.log(data);
-          console.log(data.data?.indexingStatuses[0]?.entityCount);
-          if(data.data?.indexingStatuses[0]?.entityCount)
+            if(data.data?.indexingStatuses[0]?.entityCount)
             subgraph.upgradeIndexer.value = data.data.indexingStatuses[0].entityCount;
           subgraph.upgradeIndexer.loaded = true;
           subgraph.upgradeIndexer.loading = false;
@@ -487,17 +433,15 @@ export const useSubgraphsStore = defineStore({
       
     },
     async fetch(cursor = "0"){
-      console.log("Fetch after " + cursor);
       return chainStore.getNetworkSubgraphClient.query({
         query: subgraphSettingStore.settings.queryFilters.networkFilter.length == 0 ? SUBGRAPH_QUERY_NO_NETWORK_FILTER : SUBGRAPH_QUERY,
         variables: {
           cursor: cursor,
-          minSignal: Web3.utils.toWei(subgraphSettingStore.settings.queryFilters.minSignal || "0").toString(),
+          minSignal: toWei(subgraphSettingStore.settings.queryFilters.minSignal || "0").toString(),
           networks: subgraphSettingStore.settings.queryFilters.networkFilter,
         },
       })
       .then(({ data, networkStatus }) => {
-        console.log(data);
         if(networkStatus == 7 && data.subgraphDeploymentManifests.length == 1000){
           return this.fetch(data.subgraphDeploymentManifests[data.subgraphDeploymentManifests.length-1].id)
           .then((data1) => {
@@ -515,14 +459,14 @@ export const useSubgraphsStore = defineStore({
         if(err.graphQLErrors[0]?.message){
           console.error(`Subgraphs API error: ${err.graphQLErrors[0].message}`)
           if(!this.error){
-            alert(`Subgraphs API Error: ${err.graphQLErrors[0].message}`);
+            notificationStore.error(`Subgraphs API Error: ${err.graphQLErrors[0].message}`);
             this.error = true;
           }
         }
         if(err.message){
           console.error(`Subgraphs query error: ${err.message}`);
           if(!this.error){
-            alert(`Subgraphs Error: ${err.message}`);
+            notificationStore.error(`Subgraphs Error: ${err.message}`);
             this.error = true;
           }
         }

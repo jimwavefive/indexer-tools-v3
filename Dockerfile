@@ -1,24 +1,29 @@
-# Use Node 16
-FROM node:16
+# Stage 1: Build
+FROM node:20-slim AS build
 
-# Working directory
 WORKDIR /app
 
-# Copy package.json and yarn.lock and install dependencies
-COPY package*.json yarn.lock ./
-RUN yarn
+COPY package.json yarn.lock ./
+RUN yarn --frozen-lockfile
 
-# Copy into the container
 COPY . .
-
-# Build the application
 RUN yarn build
 
-# Entrypoint for runtime env vars
+# Stage 2: Production
+FROM node:20-slim
+
+WORKDIR /app
+
+COPY package.json yarn.lock ./
+RUN yarn --frozen-lockfile --production && yarn cache clean
+
+COPY --from=build /app/dist ./dist
+COPY server.js .
+COPY docker-entrypoint.sh .
+RUN chmod +x docker-entrypoint.sh
+
 ENTRYPOINT [ "/app/docker-entrypoint.sh" ]
 
-# Expose the port the app runs on
 EXPOSE 3000
 
-# Command to run the application
-CMD ["yarn", "start"]
+CMD ["node", "server.js"]
