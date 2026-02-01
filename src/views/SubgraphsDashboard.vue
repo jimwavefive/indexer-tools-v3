@@ -60,107 +60,90 @@
           </v-expansion-panels>
         </div>
       </div>
-      <div class="d-block">
-        <v-text-field
-            v-model="search"
-            label="Search"
-            class="d-inline-block mx-4 mt-2"
-            style="width:13rem;max-width:15rem"
-        ></v-text-field>
-        <v-text-field
-            v-model="subgraphSettingStore.settings.minSignal"
-            type="number"
-            label="Min Signal"
-            class="d-inline-block mx-4"
-            style="max-width:15rem"
-        ></v-text-field>
-        <v-text-field
-            v-model="subgraphSettingStore.settings.maxSignal"
-            type="number"
-            label="Max Signal"
-            class="d-inline-block mx-4"
-            style="max-width:15rem"
-        ></v-text-field>
-        <v-confirm-edit v-if="subgraphSettingStore.newAprCalc" v-model="subgraphSettingStore.settings.newAllocation">
-          <template v-slot:default="{ model: proxyModel, save, cancel, isPristine, actions}">
-            <v-text-field
-              v-model="proxyModel.value"
-              type="number"
-              label="New Allocation"
-              class="d-inline-block mx-4"
-              style="max-width:15rem"
-              :append-inner-icon="isPristine ? '' : 'mdi-check'"
-              :clear-icon="isPristine ? '' : 'mdi-undo-variant'"
-              @click:append-inner="save"
-              @click:clear="cancel"
-              @keydown.enter="save"
-              clearable
-              hide-spin-buttons
-            ></v-text-field>
-            <component :is="actions" v-if="false"></component>
-          </template>
-        </v-confirm-edit>
-        <v-confirm-edit v-model="subgraphSettingStore.settings.targetApr">
-          <template v-slot:default="{ model: proxyModel, save, cancel, isPristine, actions}">
-            <v-text-field
-              v-model="proxyModel.value"
-              type="number"
-              label="Target APR"
-              class="d-inline-block mx-4"
-              style="max-width:15rem"
-              :append-inner-icon="isPristine ? '' : 'mdi-check'"
-              :clear-icon="isPristine ? '' : 'mdi-undo-variant'"
-              @click:append-inner="save"
-              @click:clear="cancel"
-              @keydown.enter="save"
-              clearable
-              hide-spin-buttons
-            ></v-text-field>
-            <component :is="actions" v-if="false"></component>
-          </template>
-        </v-confirm-edit>
-        <v-select
-            v-model="subgraphSettingStore.settings.noRewardsFilter"
+      <v-row class="mx-2 mt-1" align="center" dense>
+        <v-col cols="auto">
+          <v-text-field v-model="search" label="Search" style="width:11rem"
+            density="compact" hide-details></v-text-field>
+        </v-col>
+        <v-col cols="auto">
+          <v-text-field v-model="subgraphSettingStore.settings.minSignal"
+            type="number" label="Min Signal" style="width:9rem"
+            density="compact" hide-details hide-spin-buttons></v-text-field>
+        </v-col>
+        <v-col cols="auto">
+          <v-text-field v-model="subgraphSettingStore.settings.maxSignal"
+            type="number" label="Max Signal" style="width:9rem"
+            density="compact" hide-details hide-spin-buttons></v-text-field>
+        </v-col>
+        <v-col cols="auto" v-if="subgraphSettingStore.newAprCalc">
+          <v-confirm-edit v-model="subgraphSettingStore.settings.newAllocation">
+            <template v-slot:default="{ model: proxyModel, save, cancel, isPristine, actions}">
+              <v-text-field v-model="proxyModel.value" type="number" label="New Allocation"
+                style="width:10rem" density="compact" hide-details hide-spin-buttons
+                :append-inner-icon="isPristine ? '' : 'mdi-check'"
+                :clear-icon="isPristine ? '' : 'mdi-undo-variant'"
+                @click:append-inner="save" @click:clear="cancel" @keydown.enter="save"
+                clearable></v-text-field>
+              <component :is="actions" v-if="false"></component>
+            </template>
+          </v-confirm-edit>
+        </v-col>
+        <v-col cols="auto">
+          <v-confirm-edit v-model="subgraphSettingStore.settings.targetApr">
+            <template v-slot:default="{ model: proxyModel, save, cancel, isPristine, actions}">
+              <v-text-field v-model="proxyModel.value" type="number" label="Target APR"
+                style="width:12rem" density="compact" hide-details hide-spin-buttons
+                :append-inner-icon="isPristine ? '' : 'mdi-check'"
+                :clear-icon="isPristine ? '' : 'mdi-undo-variant'"
+                @click:append-inner="save" @click:clear="cancel" @keydown.enter="save"
+                clearable :disabled="autoTargetApr"></v-text-field>
+              <component :is="actions" v-if="false"></component>
+            </template>
+          </v-confirm-edit>
+        </v-col>
+        <v-col cols="auto">
+          <v-switch v-model="autoTargetApr" label="Auto" density="compact" hide-details
+            color="success" @update:model-value="onAutoTargetAprToggle"></v-switch>
+        </v-col>
+        <v-col cols="auto" v-if="autoTargetApr">
+          <v-text-field v-model="newAllocationSetterStore.reserveGRT"
+            type="number" label="Reserve GRT" style="width:9rem"
+            density="compact" hide-details hide-spin-buttons
+            @update:model-value="applyAutoTargetApr"></v-text-field>
+        </v-col>
+        <v-col cols="auto">
+          <v-select v-model="subgraphSettingStore.settings.noRewardsFilter"
             :items="[{text: 'Exclude Denied', action: 0}, {text:'Include Denied', action: 1}, {text: 'Only Denied', action: 2}]"
-            item-title="text"
-            item-value="action"
-            label="Subgraphs w/ Denied Rewards"
-            style="max-width: 15rem;"
-            class="d-inline-block mx-4"
-        ></v-select>
-        <v-combobox
-            v-model="subgraphSettingStore.settings.networkFilter"
-            :items="subgraphStore.getSubgraphNetworks"
-            label="Subgraph Networks"
-            multiple
-            chips
-            clearable
-            class="d-inline-block mx-4"
-            style="min-width:13rem;max-width: 15rem;top: -5px"
-        ></v-combobox>
-        <v-select
-            v-model="subgraphSettingStore.settings.statusFilter"
+            item-title="text" item-value="action" label="Denied Rewards"
+            style="width:12rem" density="compact" hide-details></v-select>
+        </v-col>
+      </v-row>
+      <v-row class="mx-2" align="center" dense>
+        <v-col cols="auto">
+          <v-combobox v-model="subgraphSettingStore.settings.networkFilter"
+            :items="subgraphStore.getSubgraphNetworks" label="Subgraph Networks"
+            multiple chips clearable style="width:14rem"
+            density="compact" hide-details></v-combobox>
+        </v-col>
+        <v-col cols="auto">
+          <v-select v-model="subgraphSettingStore.settings.statusFilter"
             :items="[{title:'No Filter', value:'none'},{title:'All Reported Status', value:'all'},{title:'Closable', value:'closable'},{title: 'Healthy/Synced', value:'healthy-synced'},{title:'Syncing', value:'syncing'},{title:'Failed', value:'failed'},{title:'Non-Deterministic', value:'non-deterministic'},{title:'Deterministic', value:'deterministic'}]"
-            label="Status Filter"
-            class="d-inline-block mx-4"
-            style="min-width:13rem;max-width: 15rem;top: -5px"
-        ></v-select>
-        <v-checkbox
-          v-model="subgraphSettingStore.settings.activateBlacklist"
-          label="Blacklist"
-          class="d-inline-block mr-3"
-        ></v-checkbox>
-        <v-checkbox
-          v-model="subgraphSettingStore.settings.activateSynclist"
-          label="Synclist"
-          class="d-inline-block"
-        ></v-checkbox>
-        <v-checkbox
-          v-model="subgraphSettingStore.settings.hideCurrentlyAllocated"
-          label="Hide Currently Allocated"
-          class="d-inline-block"
-        ></v-checkbox>
-      </div>
+            label="Status Filter" style="width:13rem"
+            density="compact" hide-details></v-select>
+        </v-col>
+        <v-col cols="auto">
+          <v-checkbox v-model="subgraphSettingStore.settings.activateBlacklist"
+            label="Blacklist" density="compact" hide-details></v-checkbox>
+        </v-col>
+        <v-col cols="auto">
+          <v-checkbox v-model="subgraphSettingStore.settings.activateSynclist"
+            label="Synclist" density="compact" hide-details></v-checkbox>
+        </v-col>
+        <v-col cols="auto">
+          <v-checkbox v-model="subgraphSettingStore.settings.hideCurrentlyAllocated"
+            label="Hide Currently Allocated" density="compact" hide-details></v-checkbox>
+        </v-col>
+      </v-row>
     </template>
     <template v-slot:item.deploymentStatus.blocksBehindChainhead="{ item }">
       <StatusDropdownVue :item='item' />
@@ -241,9 +224,10 @@
 </template>
 
 <script setup>
-  import { ref, watch, onUnmounted } from 'vue';
+  import { ref, watch, nextTick, onUnmounted } from 'vue';
   import { useSubgraphsStore } from '@/store/subgraphs';
   import { useSubgraphSettingStore } from '@/store/subgraphSettings';
+  import { useNewAllocationSetterStore } from '@/store/newAllocationSetter';
   import numeral from 'numeral';
   import { fromWei, toBN } from '@/plugins/web3Utils';
   import { format } from 'date-fns';
@@ -259,7 +243,27 @@
   const subgraphStore = useSubgraphsStore();
   const subgraphSettingStore = useSubgraphSettingStore();
   const tableSettingsStore = useTableSettingStore();
+  const newAllocationSetterStore = useNewAllocationSetterStore();
+  const autoTargetApr = ref(false);
   subgraphStore.fetchData();
+
+  function onAutoTargetAprToggle(enabled) {
+    if (enabled) applyAutoTargetApr();
+  }
+
+  function applyAutoTargetApr() {
+    const apr = newAllocationSetterStore.calculatedAutoTargetApr;
+    if (apr.isGreaterThan(0)) {
+      subgraphSettingStore.settings.targetApr = apr.toFixed(2);
+      newAllocationSetterStore.setAllMaxAllos();
+    }
+  }
+
+  watch(() => subgraphStore.selected, () => {
+    if (autoTargetApr.value) {
+      nextTick(() => applyAutoTargetApr());
+    }
+  }, { deep: true });
 
   const { selected } = storeToRefs(subgraphStore);
 
