@@ -1,0 +1,390 @@
+<template>
+  <v-data-table
+      :headers="subgraphSettingsStore.settings.selectedAllocationColumns"
+      :items="allocationStore.getFilteredAllocations"
+      item-selectable="subgraphDeployment.ipfsHash"
+      class="elevation-1"
+      loading-text="Loading... Please wait"
+      mobile-breakpoint="0"
+      :show-select="selectable"
+      v-model="selected"
+      v-model:sort-by="tableSettingsStore.allocationSettings.sortBy"
+      v-model:loading="allocationStore.loadingAll"
+      v-model:items-per-page="effectiveItemsPerPage"
+      v-model:page="allocationPage"
+      hover
+      no-data-text="No data available<br>"
+  >
+    <template v-slot:no-data>
+      <p class="mt-4">
+        No data available
+      </p>
+      <br>
+      <v-btn
+        rounded
+        variant="text"
+        @click="resetFilters()"
+        class="mb-4 mt-2"
+      >
+        Reset Filters
+      </v-btn>
+    </template>
+    <template v-slot:top>
+      <div class="d-block">
+        <v-btn
+          text="Export CSV"
+          prepend-icon="mdi-download"
+          class="d-inline-block mx-4 mt-5"
+          @click="exportAllocations"
+          variant="tonal"
+        ></v-btn>
+        <v-select
+            v-model="subgraphSettingsStore.settings.statusFilter"
+            :items="[{title:'No Filter', value:'none'},{title:'All Reported Status', value:'all'},{title:'Closable', value:'closable'},{title: 'Healthy/Synced', value:'healthy-synced'},{title:'Syncing', value:'syncing'},{title:'Failed', value:'failed'},{title:'Non-Deterministic', value:'non-deterministic'},{title:'Deterministic', value:'deterministic'}]"
+            label="Status Filter"
+            class="d-inline-block mx-4 mt-5"
+            style="min-width:13rem;max-width: 15rem;"
+        ></v-select>
+        <v-combobox
+          v-model="allocationStore.networkFilter"
+          :items="allocationStore.getSubgraphNetworks"
+          label="Subgraph Networks"
+          multiple
+          chips
+          clearable
+          class="d-inline-block mx-4"
+          style="min-width:13rem;max-width: 15rem;top: -5px"
+        ></v-combobox>
+        <v-checkbox
+          v-model="allocationStore.activateBlacklist"
+          label="Blacklist"
+          class="d-inline-block mr-3"
+        ></v-checkbox>
+        <v-checkbox
+          v-model="allocationStore.activateSynclist"
+          label="Synclist"
+          class="d-inline-block"
+        ></v-checkbox>
+        <v-text-field
+          v-model.number="allocationStore.minEpochDuration"
+          label="Min Epochs"
+          type="number"
+          min="0"
+          class="d-inline-block mx-4"
+          style="min-width:8rem;max-width:10rem;"
+        ></v-text-field>
+      </div>
+      <TopPagination
+        v-model:items-per-page="effectiveItemsPerPage"
+        v-model:page="allocationPage"
+        :total-items="allocationStore.getFilteredAllocations.length"
+      />
+    </template>
+    <template v-slot:item.deploymentStatus.blocksBehindChainhead="{ item }">
+      <StatusDropdownVue :item='item' :subgraph='item.subgraphDeployment' :metadata='item.subgraphDeployment.versions[0].subgraph.metadata' />
+    </template>
+    <template v-slot:item.deploymentStatus.health="{ item }">
+      <StatusDot title="Valid Chain" :status="item.statusChecks?.validChain" />
+      <StatusDot :title="`Other Indexers Status (${item.statusChecks?.healthyCount} h/${item.statusChecks?.failedCount} f)`" :status="item.statusChecks?.healthComparison" />
+      <StatusDot title="Synced" :status="item.statusChecks?.synced" />
+      <StatusDot title="Deterministic Failure" :status="item.statusChecks?.deterministicFailure" />
+    </template>
+    <template v-slot:item.id="{ item }" style="width:100;max-width:100px;min-width:100px;overflow-x: scroll;">
+      <p style="width:100;max-width:100px;min-width:100px;overflow-x: scroll;">{{ item.id }}</p>
+    </template>
+    <template v-slot:item.allocatedTokens="{ item }">
+      {{ numeral(fromWei(item.allocatedTokens.toString())).format('0,0') }} GRT
+    </template>
+    <template v-slot:item.createdAt="{ item }">
+      <span :timestamp="item.createdAt">
+        <v-tooltip theme="dark" location="top">
+          <template v-slot:activator="{ props }">
+            <span
+              v-bind="props"
+            >
+            Epoch {{ item.createdAtEpoch }}
+            </span>
+          </template>
+          <span>{{ format(new Date(Number(item.createdAt) * 1000), "MMM d, yyyy HH:mm") }}</span>
+        </v-tooltip>
+      </span>
+    </template>
+    <template v-slot:item.activeDuration="{ item }">
+      <span :timestamp="item.activeDuration">
+        <v-tooltip theme="dark" location="top">
+          <template v-slot:activator="{ props }">
+            <span
+              v-bind="props"
+            >
+            {{ item.epochDuration }} epochs
+            </span>
+          </template>
+          <span>{{ item.readableDuration }}</span>
+        </v-tooltip>
+      </span>
+    </template>
+    <template v-slot:item.subgraphDeployment.signalledTokens="{ item }">
+      {{ numeral(fromWei(item.subgraphDeployment.signalledTokens.toString())).format('0,0') }} GRT
+    </template>
+    <template v-slot:item.subgraphDeployment.indexingRewardAmount="{ item }">
+      {{ numeral(fromWei(item.subgraphDeployment.indexingRewardAmount.toString())).format('0,0') }} GRT
+    </template>
+    <template v-slot:item.subgraphDeployment.queryFeesAmount="{ item }">
+      {{ numeral(fromWei(item.subgraphDeployment.queryFeesAmount.toString())).format('0,0') }} GRT
+    </template>
+    <template v-slot:item.subgraphDeployment.stakedTokens="{ item }">
+      {{ numeral(fromWei(item.subgraphDeployment.stakedTokens.toString())).format('0,0') }} GRT
+    </template>
+    <template v-slot:item.proportion="{ item }">
+      {{ numeral(item.proportion).format('0,0.0000') }}
+    </template>
+    <template v-slot:item.apr="{ item }">
+      {{ numeral(item.apr).format('0,0.00') }}%
+    </template>
+    <template v-slot:item.dailyRewards="{ item }">
+      {{ numeral(fromWei(toBN(item.dailyRewards))).format('0,0') }} GRT
+    </template>
+    <template v-slot:item.dailyRewardsCut="{ item }">
+      {{ numeral(fromWei(toBN(item.dailyRewardsCut))).format('0,0') }} GRT
+    </template>
+    <template v-slot:item.pendingRewards.value="{ item }">
+      <span
+        v-if="!item.pendingRewards.loading && !item.pendingRewards.loaded"
+        >
+        <v-icon left @click="allocationStore.fetchPendingRewards(item.id);">
+          mdi-download
+        </v-icon>
+      </span>
+      <v-progress-circular
+          indeterminate
+          color="purple"
+          v-if="item.pendingRewards.loading && !item.pendingRewards.loaded"
+      ></v-progress-circular>
+      <div 
+       v-if="!item.pendingRewards.loading && item.pendingRewards.loaded"
+       class="d-flex"
+      >
+        <span>
+        {{ numeral(fromWei(toBN(item.pendingRewards.value))).format('0,0') }} GRT
+      </span>
+      <v-tooltip
+          location="top"
+          v-if="item.subgraphDeployment.deniedAt"
+        >
+          <template v-slot:activator="{ props }">
+            <v-icon v-bind="props" size="12" class="mb-2 mr-3">
+              mdi-information
+            </v-icon>
+          </template>
+          <span>Rewards Denied for Subgraph</span>
+        </v-tooltip>
+      </div>
+      
+    </template>
+    <template v-slot:item.pendingRewardsCut="{ item }">
+      <span
+        v-if="!item.pendingRewards.loading && !item.pendingRewards.loaded"
+        >
+        <v-icon left @click="allocationStore.fetchAllPendingRewards();">
+          mdi-download-multiple
+        </v-icon>
+      </span>
+      <v-progress-circular
+          indeterminate
+          color="purple"
+          v-if="item.pendingRewards.loading && !item.pendingRewards.loaded"
+      ></v-progress-circular>
+      <div 
+       v-if="!item.pendingRewards.loading && item.pendingRewards.loaded"
+       class="d-flex"
+      >
+        <span>
+          {{ numeral(fromWei(toBN(item.pendingRewardsCut))).format('0,0') }} GRT
+      </span>
+      <v-tooltip
+          location="top"
+          v-if="item.subgraphDeployment.deniedAt"
+        >
+          <template v-slot:activator="{ props }">
+            <v-icon v-bind="props" size="12" class="mb-2 mr-3">
+              mdi-information
+            </v-icon>
+          </template>
+          <span>Rewards Denied for Subgraph</span>
+        </v-tooltip>
+      </div>
+    </template>
+    <template v-slot:item.qos.query_count="{ item }">
+      {{ numeral(item.qos?.query_count).format('0,0') }} queries
+    </template>
+    <template v-slot:item.qos.total_query_fees="{ item }">
+      {{ numeral(item.qos?.total_query_fees).format('0,0') }} GRT
+    </template>
+    <template v-slot:item.qos.avg_indexer_latency_ms="{ item }">
+      {{ numeral(item.qos?.avg_indexer_latency_ms).format('0,0.0') }} ms
+    </template>
+    <template v-slot:item.qos.max_indexer_latency_ms="{ item }">
+      {{ numeral(item.qos?.max_indexer_latency_ms).format('0,0.0') }} ms
+    </template>
+    <template v-slot:item.qos.avg_query_fee="{ item }">
+      {{ numeral(item.qos?.avg_query_fee).format('0,0.00000') }} GRT
+    </template>
+    <template v-slot:item.qos.max_query_fee="{ item }">
+      {{ numeral(item.qos?.max_query_fee).format('0,0.00000') }} GRT
+    </template>
+    <template v-slot:item.qos.proportion_indexer_200_responses="{ item }">
+      {{ numeral(item.qos?.proportion_indexer_200_responses).format('0.00%') }}
+    </template>
+    <template v-slot:item.qos.avg_indexer_blocks_behind="{ item }">
+      {{ numeral(item.qos?.avg_indexer_blocks_behind).format('0,0') }} blocks
+    </template>
+    <template v-slot:item.qos.max_indexer_blocks_behind="{ item }">
+      {{ numeral(item.qos?.max_indexer_blocks_behind).format('0,0') }} blocks
+    </template>
+    <template v-slot:item.qos.num_indexer_200_responses="{ item }">
+      {{ numeral(item.qos?.num_indexer_200_responses).format('0,0') }} queries
+    </template>
+    <template v-slot:item.queryFees.query_count="{ item }">
+      {{ item.queryFees?.query_count ? numeral(item.queryFees.query_count).format('0,0') : '-' }}
+    </template>
+    <template v-slot:item.queryFees.total_query_fees="{ item }">
+      {{ item.queryFees?.total_query_fees ? numeral(item.queryFees.total_query_fees).format('0,0') : '-' }} GRT
+    </template>
+    <template v-slot:item.queryFees.avg_gateway_latency_ms="{ item }">
+      {{ numeral(item.queryFees?.avg_gateway_latency_ms).format('0,0.00') }} ms
+    </template>
+    <template v-slot:item.queryFees.avg_query_fee="{ item }">
+      {{ numeral(item.queryFees?.avg_query_fee).format('0,0.00000') }} GRT
+    </template>
+    <template v-slot:item.queryFees.gateway_query_success_rate="{ item }">
+      {{ numeral(item.queryFees?.gateway_query_success_rate).format('0.00%') }}
+    </template>
+    <template v-slot:body.append>
+      <DashboardFooter :columns="subgraphSettingsStore.settings.selectedAllocationColumns" :selectable="selectable">
+        <template v-slot:selectable>
+          <strong style="font-size: 11px">Totals</strong>
+        </template>
+        <template v-slot:deploymentStatus.blocksBehindChainhead>
+          <strong style="font-size: 11px" v-if="!selectable">Totals</strong>
+        </template>
+        <template v-slot:subgraphDeployment.versions[0].subgraph.metadata.displayName>
+          <strong>{{ allocationStore.getAllocations.length }} allocations</strong>&nbsp;&nbsp;
+        </template>
+        <template v-slot:apr>
+          <strong>{{ numeral(allocationStore.avgAPR).format('0,0.00%') }}</strong>&nbsp;&nbsp;
+        </template>
+        <template v-slot:dailyRewards>
+          <strong>{{ numeral(fromWei(toBN(allocationStore.dailyRewardsSum))).format('0,0') }} GRT&nbsp;&nbsp;</strong>
+        </template>
+        <template v-slot:dailyRewardsCut>
+          <strong>{{ numeral(fromWei(toBN(allocationStore.dailyRewardsCutSum))).format('0,0') }} GRT&nbsp;&nbsp;</strong>
+        </template>
+        <template v-slot:pendingRewards.value>
+          <strong>{{ numeral(fromWei(toBN(allocationStore.pendingRewardsSum))).format('0,0') }} GRT&nbsp;&nbsp;</strong>
+        </template>
+        <template v-slot:pendingRewardsCut>
+          <strong>{{ numeral(fromWei(toBN(allocationStore.pendingRewardsCutSum))).format('0,0') }} GRT</strong>
+        </template>
+      </DashboardFooter>
+    </template>
+  </v-data-table>
+</template>
+
+<script setup>
+  import { ref, computed, watch, onUnmounted } from "vue";
+  import { format } from "date-fns";
+  import numeral from "numeral";
+  import { fromWei, toBN } from '@/plugins/web3Utils';
+  import { useAllocationStore } from "@/store/allocations";
+  import { useAccountStore } from "@/store/accounts";
+  import { storeToRefs } from "pinia";
+  import { useSubgraphSettingStore } from "@/store/subgraphSettings";
+  import { useChainStore } from "@/store/chains";
+  import { useTableSettingStore } from "@/store/tableSettings";
+  import StatusDropdownVue from '@/components/StatusDropdown.vue';
+  import DashboardFooter from "@/components/DashboardFooter.vue";
+  import { useChainValidationStore } from "@/store/chainValidation";
+  import StatusDot from "@/components/StatusDot.vue";
+  import { exportToCsv } from "@/plugins/csvExport";
+  import { useAppStore } from "@/store/app";
+  import TopPagination from "@/components/TopPagination.vue";
+
+  const allocationStore = useAllocationStore();
+  const accountStore = useAccountStore();
+  const subgraphSettingsStore = useSubgraphSettingStore();
+  const tableSettingsStore = useTableSettingStore();
+  const chainStore = useChainStore();
+  const chainValidationStore = useChainValidationStore();
+  const { getActiveAccount } = storeToRefs(accountStore);
+
+  const allocationPage = ref(1);
+  const { selected, loaded } = storeToRefs(allocationStore);
+
+  const props = defineProps({
+    selectable: {
+      type: Boolean,
+      default: false,
+    },
+    defaultItemsPerPage: {
+      type: Number,
+      default: null,
+    },
+  })
+
+  const localItemsPerPage = ref(props.defaultItemsPerPage ?? tableSettingsStore.allocationSettings.itemsPerPage);
+  const effectiveItemsPerPage = computed({
+    get: () => props.defaultItemsPerPage != null ? localItemsPerPage.value : tableSettingsStore.allocationSettings.itemsPerPage,
+    set: (val) => {
+      if (props.defaultItemsPerPage != null) {
+        localItemsPerPage.value = val;
+      } else {
+        tableSettingsStore.allocationSettings.itemsPerPage = val;
+      }
+    }
+  });
+
+  function resetFilters () {
+    subgraphSettingsStore.settings.statusFilter = "none";
+    allocationStore.networkFilter = [];
+    allocationStore.activateBlacklist = false;
+    allocationStore.activateSynclist = false;
+    allocationStore.minEpochDuration = 0;
+  }
+
+  watch(loaded, (loaded) => {
+    if(loaded == true && subgraphSettingsStore.settings.automaticIndexingRewards && subgraphSettingsStore.settings.rpc[chainStore.getChainID] != '')
+      allocationStore.fetchAllPendingRewards();
+  })
+  watch(getActiveAccount,  async (newAccount, oldAccount) => {
+    allocationStore.loaded = false;
+    allocationStore.loading = false;
+    if(newAccount.address != oldAccount.address || newAccount.chain != oldAccount.chain)
+      allocationStore.fetchData();
+  });
+
+  function exportAllocations() {
+    exportToCsv(
+      subgraphSettingsStore.settings.selectedAllocationColumns,
+      allocationStore.getFilteredAllocations,
+      'allocations.csv'
+    );
+  }
+
+  const appStore = useAppStore();
+  let autoRefreshTimer = null;
+
+  function setupAutoRefresh() {
+    if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+    if (appStore.autoRefreshInterval > 0) {
+      autoRefreshTimer = setInterval(() => {
+        allocationStore.fetchData();
+      }, appStore.autoRefreshInterval);
+    }
+  }
+
+  watch(() => appStore.autoRefreshInterval, setupAutoRefresh);
+  setupAutoRefresh();
+  onUnmounted(() => { if (autoRefreshTimer) clearInterval(autoRefreshTimer); });
+
+  allocationStore.init();
+</script>
