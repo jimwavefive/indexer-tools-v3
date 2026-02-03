@@ -176,6 +176,23 @@
               type="number"
             ></v-text-field>
           </div>
+          <div v-if="ruleForm.type === 'subgraph_upgrade'" class="mb-2">
+            <v-text-field
+              v-model.number="ruleForm.conditions.maxApr"
+              label="Max APR (%)"
+              type="number"
+              hint="Only alert when subgraph APR is at or below this value"
+              persistent-hint
+            ></v-text-field>
+            <v-text-field
+              v-model.number="ruleForm.conditions.minGrt"
+              label="Min GRT Allocated"
+              type="number"
+              hint="Only alert when allocated GRT is at or above this value"
+              persistent-hint
+              class="mt-2"
+            ></v-text-field>
+          </div>
 
           <v-select
             v-model="ruleForm.channels"

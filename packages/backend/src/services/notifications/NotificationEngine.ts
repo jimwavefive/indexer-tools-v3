@@ -82,10 +82,13 @@ export class NotificationEngine {
     // Phase 2: Send batch to each channel
     const records: HistoryRecord[] = [];
 
-    if ((pending.length > 0 || filterSummaries.size > 0) && channels.length > 0) {
+    if (pending.length > 0 && channels.length > 0) {
+      // Only include filter summaries alongside real notifications — never send a
+      // digest containing only summaries, as that would repeat every poll cycle.
+      const summaries = filterSummaries.size > 0 ? filterSummaries : undefined;
       for (const channel of channels) {
         try {
-          await channel.sendBatch(pending, filterSummaries);
+          await channel.sendBatch(pending, summaries);
         } catch (err) {
           console.error(
             `Failed to send batch via channel "${channel.name}" (${channel.id}):`,
