@@ -13,11 +13,63 @@ const RULE_LABELS: Record<string, { emoji: string; label: string }> = {
   'subgraph-upgrade': { emoji: '🔄', label: 'Subgraph Upgrades' },
 };
 
+interface TableColumn {
+  header: string;
+  format: (item: Notification) => string;
+}
+
+interface TableSpec {
+  columns: TableColumn[];
+  sortValue: (item: Notification) => number;
+  sortDirection: 'asc' | 'desc';
+}
+
+const RULE_TABLE_SPECS: Record<string, TableSpec> = {
+  'subgraph-upgrade': {
+    columns: [
+      { header: 'GRT', format: (n) => formatGRT((n.metadata?.allocatedGRT as string) ?? '?') },
+      { header: 'APR', format: (n) => `${n.metadata?.apr ?? '?'}%` },
+    ],
+    sortValue: (n) => parseFloat((n.metadata?.apr as string) ?? '0'),
+    sortDirection: 'asc',
+  },
+  'allocation-duration': {
+    columns: [
+      { header: 'Epochs', format: (n) => String(n.metadata?.epochDuration ?? '?') },
+      { header: 'Threshold', format: (n) => String(n.metadata?.thresholdEpochs ?? '?') },
+    ],
+    sortValue: (n) => Number(n.metadata?.epochDuration ?? 0),
+    sortDirection: 'desc',
+  },
+  proportion: {
+    columns: [
+      { header: 'Ratio', format: (n) => {
+        const ratio = n.metadata?.ratio ?? n.metadata?.proportionRatio;
+        return ratio !== undefined ? Number(ratio).toFixed(3) : '?';
+      }},
+      { header: 'Threshold', format: (n) => String(n.metadata?.threshold ?? '?') },
+    ],
+    sortValue: (n) => parseFloat((n.metadata?.ratio as string) ?? (n.metadata?.proportionRatio as string) ?? '0'),
+    sortDirection: 'asc',
+  },
+  'signal-drop': {
+    columns: [],
+    sortValue: () => 0,
+    sortDirection: 'asc',
+  },
+};
+
 const MAX_RETRIES = 2;
 const DISCORD_EMBED_CHAR_LIMIT = 4000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatGRT(value: string): string {
+  const num = parseInt(value, 10);
+  if (isNaN(num)) return value;
+  return num.toLocaleString('en-US');
 }
 
 export class DiscordChannel implements Channel {
@@ -45,17 +97,17 @@ export class DiscordChannel implements Channel {
     await this.sendBatch([notification]);
   }
 
-  async sendBatch(notifications: Notification[]): Promise<void> {
-    if (notifications.length === 0) return;
+  async sendBatch(notifications: Notification[], filterSummaries?: Map<string, string>): Promise<void> {
+    if (notifications.length === 0 && (!filterSummaries || filterSummaries.size === 0)) return;
 
-    // Single notification — send as a simple embed
-    if (notifications.length === 1) {
+    // Single notification with no filter summaries — send as a simple embed
+    if (notifications.length === 1 && (!filterSummaries || filterSummaries.size === 0)) {
       await this.postEmbed(this.buildSingleEmbed(notifications[0]));
       return;
     }
 
-    // Multiple notifications — group by rule and build a digest
-    const embeds = this.buildDigestEmbeds(notifications);
+    // Multiple notifications or filter summaries — group by rule and build a digest
+    const embeds = this.buildDigestEmbeds(notifications, filterSummaries);
     for (const embed of embeds) {
       await this.postEmbed(embed);
     }
@@ -83,7 +135,7 @@ export class DiscordChannel implements Channel {
     };
   }
 
-  private buildDigestEmbeds(notifications: Notification[]): Record<string, unknown>[] {
+  private buildDigestEmbeds(notifications: Notification[], filterSummaries?: Map<string, string>): Record<string, unknown>[] {
     // Group by ruleId
     const grouped = new Map<string, Notification[]>();
     for (const n of notifications) {
@@ -117,34 +169,65 @@ export class DiscordChannel implements Channel {
       }
       description += header;
 
-      for (const item of items) {
+      const tableSpec = RULE_TABLE_SPECS[ruleId];
+      const rows = items.map((item) => {
         const nameMatch = item.message.match(/\*\*(.+?)\*\*/);
         const name = nameMatch ? nameMatch[1] : 'Unknown';
-        const hash = (item.metadata?.deploymentIpfsHash as string) || '';
-        const shortHash = hash ? ` \`${hash.slice(0, 8)}…\`` : '';
-
-        let detail = '';
-        if (ruleId === 'allocation-duration') {
-          const epochs = item.metadata?.epochDuration ?? '?';
-          const threshold = item.metadata?.thresholdEpochs ?? '?';
-          detail = ` — ${epochs} epochs (threshold: ${threshold})`;
-        } else if (ruleId === 'proportion') {
-          const ratio = item.metadata?.ratio ?? item.metadata?.proportionRatio;
-          detail = ratio !== undefined ? ` — ratio: ${Number(ratio).toFixed(3)}` : '';
+        const cells: string[] = [name];
+        if (tableSpec) {
+          for (const col of tableSpec.columns) {
+            cells.push(col.format(item));
+          }
         }
+        return { cells, sortValue: tableSpec?.sortValue(item) ?? 0 };
+      });
 
-        const line = `• **${name}**${shortHash}${detail}\n`;
+      if (tableSpec) {
+        rows.sort((a, b) =>
+          tableSpec.sortDirection === 'desc' ? b.sortValue - a.sortValue : a.sortValue - b.sortValue,
+        );
+      }
+
+      const headers = ['Name', ...(tableSpec?.columns.map((c) => c.header) ?? [])];
+      const colWidths = headers.map((h, i) =>
+        Math.max(h.length, ...rows.map((r) => r.cells[i].length)),
+      );
+
+      const hdrLine = headers.map((h, i) => (i === 0 ? h.padEnd(colWidths[i]) : h.padStart(colWidths[i]))).join('  ');
+      const sep = '─'.repeat(hdrLine.length);
+      let table = '```\n' + hdrLine + '\n' + sep + '\n';
+
+      for (const row of rows) {
+        const line = row.cells.map((c, i) => (i === 0 ? c.padEnd(colWidths[i]) : c.padStart(colWidths[i]))).join('  ') + '\n';
+        if (description.length + table.length + line.length + 4 > DESCRIPTION_LIMIT) {
+          truncated = true;
+          break;
+        }
+        table += line;
+        shownCount++;
+      }
+
+      table += '```\n';
+      description += table;
+
+      description += '\n';
+    }
+
+    // Append filter summaries for rules that had matches filtered out
+    if (filterSummaries) {
+      for (const [ruleId, summary] of filterSummaries) {
+        if (grouped.has(ruleId)) continue; // rule already has notifications shown
+        if (truncated) break;
+
+        const ruleInfo = RULE_LABELS[ruleId] || { emoji: '🔔', label: ruleId };
+        const line = `### ${ruleInfo.emoji} ${ruleInfo.label}\n*${summary}*\n\n`;
 
         if (description.length + line.length > DESCRIPTION_LIMIT) {
           truncated = true;
           break;
         }
-
         description += line;
-        shownCount++;
       }
-
-      description += '\n';
     }
 
     if (truncated) {
