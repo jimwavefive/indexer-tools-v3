@@ -54,9 +54,15 @@ export class NotificationEngine {
 
     // Phase 1: Collect all triggered notifications (applying cooldowns)
     const pending: Notification[] = [];
+    const filterSummaries = new Map<string, string>();
 
     for (const rule of rules) {
       const result = rule.evaluate(context);
+
+      if (result.filterSummary) {
+        filterSummaries.set(rule.id, result.filterSummary);
+      }
+
       if (!result.triggered) continue;
 
       for (const notification of result.notifications) {
@@ -76,10 +82,10 @@ export class NotificationEngine {
     // Phase 2: Send batch to each channel
     const records: HistoryRecord[] = [];
 
-    if (pending.length > 0 && channels.length > 0) {
+    if ((pending.length > 0 || filterSummaries.size > 0) && channels.length > 0) {
       for (const channel of channels) {
         try {
-          await channel.sendBatch(pending);
+          await channel.sendBatch(pending, filterSummaries);
         } catch (err) {
           console.error(
             `Failed to send batch via channel "${channel.name}" (${channel.id}):`,

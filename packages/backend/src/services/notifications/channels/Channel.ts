@@ -16,7 +16,7 @@ export interface Channel {
   enabled: boolean;
   config: Record<string, unknown>;
   send(notification: Notification): Promise<void>;
-  sendBatch(notifications: Notification[]): Promise<void>;
+  sendBatch(notifications: Notification[], filterSummaries?: Map<string, string>): Promise<void>;
 }
 
 export interface ChannelConfig {

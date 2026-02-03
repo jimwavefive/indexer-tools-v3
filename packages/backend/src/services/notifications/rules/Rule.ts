@@ -23,6 +23,7 @@ export interface PreviousState {
 export interface RuleResult {
   triggered: boolean;
   notifications: Notification[];
+  filterSummary?: string;
 }
 
 export interface Rule {
