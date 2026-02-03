@@ -1,13 +1,8 @@
-node_modules/
+**/node_modules/
+**/dist/
 .git/
-tests/
 .github/
 .claude/
 *.md
-.editorconfig
-.eslintrc.js
-.browserslistrc
-jsconfig.json
-vitest.config.js
-playwright.config.js
-docker-compose.test.yml
+.env*
+docker-compose*.yml
