@@ -1,0 +1,32 @@
+{
+  "name": "@indexer-tools/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./graphql": "./dist/graphql/index.js",
+    "./graphql/*": "./dist/graphql/*.js",
+    "./math/*": "./dist/math/*.js",
+    "./math/commonCalcs": "./dist/math/commonCalcs.js",
+    "./math/web3Utils": "./dist/math/web3Utils.js",
+    "./types/*": "./dist/types/*.js",
+    "./config/*": "./dist/config/*.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "bignumber.js": "^9.1.1",
+    "graphql": "^16.6.0",
+    "graphql-tag": "^2.12.6"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0"
+  }
+}
