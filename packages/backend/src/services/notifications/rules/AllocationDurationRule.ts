@@ -30,7 +30,7 @@ export class AllocationDurationRule implements Rule {
         const displayName = getAllocationDisplayName(allocation);
         notifications.push({
           title: `Allocation nearing max duration`,
-          message: `Allocation on **${displayName}** (${allocation.subgraphDeployment.ipfsHash.slice(0, 12)}...) has been open for ${epochDuration} epochs (threshold: ${thresholdEpochs}). The max allocation lifetime is 28 epochs.`,
+          message: `Allocation on **${displayName}** (${allocation.subgraphDeployment.ipfsHash.slice(0, 12)}...) has been open for **${epochDuration} epochs** (threshold: ${thresholdEpochs}). Close and re-allocate soon.`,
           severity: 'critical',
           timestamp: new Date().toISOString(),
           ruleId: this.id,

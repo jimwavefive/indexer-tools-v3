@@ -17,6 +17,11 @@ export const GET_ALLOCATIONS = gql`
         versions(first: 1, orderBy: version, orderDirection: desc) {
           subgraph {
             id
+            currentVersion {
+              subgraphDeployment {
+                ipfsHash
+              }
+            }
             metadata {
               image
               displayName

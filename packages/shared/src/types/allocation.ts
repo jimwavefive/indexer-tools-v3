@@ -4,6 +4,11 @@ export interface SubgraphDeployment {
   versions: Array<{
     subgraph: {
       id: string;
+      currentVersion?: {
+        subgraphDeployment: {
+          ipfsHash: string;
+        };
+      };
       metadata: {
         image: string;
         displayName: string;
