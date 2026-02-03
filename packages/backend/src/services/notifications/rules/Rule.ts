@@ -18,7 +18,6 @@ export interface RuleContext {
 
 export interface PreviousState {
   allocations: Allocation[];
-  deploymentHashes: Map<string, string>;
 }
 
 export interface RuleResult {

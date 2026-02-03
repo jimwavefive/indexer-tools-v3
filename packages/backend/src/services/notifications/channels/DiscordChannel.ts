@@ -127,7 +127,7 @@ export class DiscordChannel implements Channel {
         if (ruleId === 'allocation-duration') {
           const epochs = item.metadata?.epochDuration ?? '?';
           const threshold = item.metadata?.thresholdEpochs ?? '?';
-          detail = ` — epoch ${epochs}/${threshold}`;
+          detail = ` — ${epochs} epochs (threshold: ${threshold})`;
         } else if (ruleId === 'proportion') {
           const ratio = item.metadata?.ratio ?? item.metadata?.proportionRatio;
           detail = ratio !== undefined ? ` — ratio: ${Number(ratio).toFixed(3)}` : '';

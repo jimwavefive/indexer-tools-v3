@@ -22,7 +22,6 @@ export class NotificationEngine {
   private cooldownMap = new Map<string, number>();
   private previousState: PreviousState = {
     allocations: [],
-    deploymentHashes: new Map(),
   };
   private history: HistoryRecord[] = [];
   private onHistoryRecord?: (record: HistoryRecord) => void;
@@ -125,16 +124,8 @@ export class NotificationEngine {
   }
 
   private updatePreviousState(allocations: Allocation[]): void {
-    const deploymentHashes = new Map<string, string>();
-    for (const allocation of allocations) {
-      const versions = allocation.subgraphDeployment.versions;
-      if (versions.length > 0) {
-        deploymentHashes.set(versions[0].subgraph.id, allocation.subgraphDeployment.ipfsHash);
-      }
-    }
     this.previousState = {
       allocations: [...allocations],
-      deploymentHashes,
     };
   }
 
