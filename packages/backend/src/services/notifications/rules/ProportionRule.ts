@@ -48,6 +48,7 @@ export class ProportionRule implements Rule {
           ruleId: this.id,
           metadata: {
             allocationId: allocation.id,
+            subgraphName: displayName,
             deploymentIpfsHash: allocation.subgraphDeployment.ipfsHash,
             ratio: ratio.toFixed(4),
             threshold,

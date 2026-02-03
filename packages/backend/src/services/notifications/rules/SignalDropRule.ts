@@ -32,6 +32,7 @@ export class SignalDropRule implements Rule {
           ruleId: this.id,
           metadata: {
             allocationId: allocation.id,
+            subgraphName: displayName,
             deploymentIpfsHash: allocation.subgraphDeployment.ipfsHash,
             signalledTokens: allocation.subgraphDeployment.signalledTokens,
           },

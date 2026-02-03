@@ -96,6 +96,7 @@ export class SubgraphUpgradeRule implements Rule {
         ruleId: this.id,
         metadata: {
           subgraphId,
+          subgraphName: displayName,
           latestDeploymentHash,
           currentDeploymentHashes: currentHashes,
           allocatedGRT: totalAllocatedGRT.toFixed(0),
