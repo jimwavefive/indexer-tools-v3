@@ -36,6 +36,7 @@ export class AllocationDurationRule implements Rule {
           ruleId: this.id,
           metadata: {
             allocationId: allocation.id,
+            subgraphName: displayName,
             deploymentIpfsHash: allocation.subgraphDeployment.ipfsHash,
             epochDuration,
             thresholdEpochs,
