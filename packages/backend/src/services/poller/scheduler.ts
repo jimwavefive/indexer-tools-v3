@@ -1,20 +1,20 @@
 import { NetworkPoller } from './NetworkPoller.js';
 import { NotificationEngine } from '../notifications/NotificationEngine.js';
-import { JsonStore } from '../../db/jsonStore.js';
+import { SqliteStore } from '../../db/sqliteStore.js';
 
-const DEFAULT_POLLING_INTERVAL_SECONDS = 300; // 5 minutes
+const DEFAULT_POLLING_INTERVAL_SECONDS = 600; // 10 minutes
 
 export class PollingScheduler {
   private poller: NetworkPoller;
   private engine: NotificationEngine;
-  private store: JsonStore;
+  private store: SqliteStore;
   private indexerAddress: string;
   private intervalMs: number;
   private timer: ReturnType<typeof setInterval> | null = null;
   private polling = false;
 
   constructor(options: {
-    store: JsonStore;
+    store: SqliteStore;
     indexerAddress: string;
     pollingIntervalSeconds?: number;
   }) {
@@ -25,6 +25,7 @@ export class PollingScheduler {
       (options.pollingIntervalSeconds ?? DEFAULT_POLLING_INTERVAL_SECONDS) * 1000;
 
     this.engine = new NotificationEngine({
+      store: this.store,
       onHistoryRecord: (record) => {
         this.store.addHistory(record).catch((err) => {
           console.error('Failed to persist history record:', err);
@@ -56,6 +57,17 @@ export class PollingScheduler {
       clearInterval(this.timer);
       this.timer = null;
       console.log('PollingScheduler stopped');
+    }
+  }
+
+  updateInterval(newIntervalSeconds: number): void {
+    this.intervalMs = newIntervalSeconds * 1000;
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = setInterval(() => {
+        this.poll().catch((err) => console.error('Scheduled poll failed:', err));
+      }, this.intervalMs);
+      console.log(`PollingScheduler interval updated to ${newIntervalSeconds}s`);
     }
   }
 

@@ -7,6 +7,11 @@ export const useNotificationRulesStore = defineStore('notificationRules', {
     rules: [],
     channels: [],
     history: [],
+    incidents: [],
+    settings: {
+      pollingIntervalSeconds: 600,
+      cooldownMinutes: 60,
+    },
     loading: false,
   }),
   actions: {
@@ -182,6 +187,84 @@ export const useNotificationRulesStore = defineStore('notificationRules', {
         this.history = [];
       } catch (err) {
         console.error('[notificationRules] clearHistory error:', err);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    // --- Incidents ---
+    async fetchIncidents(status = 'open') {
+      this.loading = true;
+      try {
+        const res = await fetch(`${BASE_URL}/api/notifications/incidents?status=${status}`);
+        if (!res.ok) throw new Error(`Failed to fetch incidents: ${res.statusText}`);
+        this.incidents = await res.json();
+      } catch (err) {
+        console.error('[notificationRules] fetchIncidents error:', err);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async acknowledgeIncident(id) {
+      this.loading = true;
+      try {
+        const res = await fetch(`${BASE_URL}/api/notifications/incidents/${id}/acknowledge`, {
+          method: 'PUT',
+        });
+        if (!res.ok) throw new Error(`Failed to acknowledge incident: ${res.statusText}`);
+        const updated = await res.json();
+        const idx = this.incidents.findIndex((i) => i.id === id);
+        if (idx !== -1) this.incidents[idx] = updated;
+        return updated;
+      } catch (err) {
+        console.error('[notificationRules] acknowledgeIncident error:', err);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async resolveIncident(id) {
+      this.loading = true;
+      try {
+        const res = await fetch(`${BASE_URL}/api/notifications/incidents/${id}/resolve`, {
+          method: 'PUT',
+        });
+        if (!res.ok) throw new Error(`Failed to resolve incident: ${res.statusText}`);
+        const updated = await res.json();
+        const idx = this.incidents.findIndex((i) => i.id === id);
+        if (idx !== -1) this.incidents[idx] = updated;
+        return updated;
+      } catch (err) {
+        console.error('[notificationRules] resolveIncident error:', err);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    // --- Settings ---
+    async fetchSettings() {
+      try {
+        const res = await fetch(`${BASE_URL}/api/notifications/settings`);
+        if (!res.ok) throw new Error(`Failed to fetch settings: ${res.statusText}`);
+        this.settings = await res.json();
+      } catch (err) {
+        console.error('[notificationRules] fetchSettings error:', err);
+      }
+    },
+
+    async updateSettings(settings) {
+      this.loading = true;
+      try {
+        const res = await fetch(`${BASE_URL}/api/notifications/settings`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(settings),
+        });
+        if (!res.ok) throw new Error(`Failed to update settings: ${res.statusText}`);
+        this.settings = await res.json();
+      } catch (err) {
+        console.error('[notificationRules] updateSettings error:', err);
       } finally {
         this.loading = false;
       }

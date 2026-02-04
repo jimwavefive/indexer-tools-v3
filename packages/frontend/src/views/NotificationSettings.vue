@@ -14,9 +14,17 @@
           <v-icon start>mdi-webhook</v-icon>
           Channels
         </v-tab>
+        <v-tab value="incidents">
+          <v-icon start>mdi-alert-circle-outline</v-icon>
+          Incidents
+        </v-tab>
         <v-tab value="history">
           <v-icon start>mdi-history</v-icon>
           History
+        </v-tab>
+        <v-tab value="settings">
+          <v-icon start>mdi-cog</v-icon>
+          Settings
         </v-tab>
       </v-tabs>
 
@@ -102,6 +110,96 @@
           </v-card>
         </v-window-item>
 
+        <!-- ========== INCIDENTS TAB ========== -->
+        <v-window-item value="incidents">
+          <v-card flat>
+            <v-card-text>
+              <div class="d-flex align-center mb-4">
+                <v-select
+                  v-model="incidentStatusFilter"
+                  :items="incidentStatusOptions"
+                  label="Status"
+                  density="compact"
+                  hide-details
+                  style="max-width: 200px"
+                  @update:model-value="loadIncidents"
+                ></v-select>
+                <v-spacer></v-spacer>
+                <v-btn variant="outlined" size="small" @click="loadIncidents">
+                  <v-icon start>mdi-refresh</v-icon>
+                  Refresh
+                </v-btn>
+              </div>
+
+              <v-data-table
+                :headers="incidentHeaders"
+                :items="store.incidents"
+                :loading="store.loading"
+                items-per-page="25"
+                show-expand
+              >
+                <template #item.status="{ item }">
+                  <v-chip
+                    :color="incidentStatusColor(item.status)"
+                    size="small"
+                    label
+                  >
+                    {{ item.status }}
+                  </v-chip>
+                </template>
+                <template #item.severity="{ item }">
+                  <v-chip
+                    :color="severityColor(item.severity)"
+                    size="small"
+                    label
+                  >
+                    {{ item.severity }}
+                  </v-chip>
+                </template>
+                <template #item.target_label="{ item }">
+                  <span :title="item.target_key">{{ item.target_label }}</span>
+                </template>
+                <template #item.first_seen="{ item }">
+                  {{ formatDate(item.first_seen) }}
+                </template>
+                <template #item.last_seen="{ item }">
+                  {{ formatDate(item.last_seen) }}
+                </template>
+                <template #item.actions="{ item }">
+                  <v-btn
+                    v-if="item.status === 'open'"
+                    size="x-small"
+                    variant="outlined"
+                    class="mr-1"
+                    @click="acknowledgeIncident(item)"
+                  >Ack</v-btn>
+                  <v-btn
+                    v-if="item.status !== 'resolved'"
+                    size="x-small"
+                    variant="outlined"
+                    color="success"
+                    @click="resolveIncident(item)"
+                  >Resolve</v-btn>
+                </template>
+                <template #expanded-row="{ columns, item }">
+                  <tr>
+                    <td :colspan="columns.length" class="pa-4">
+                      <div class="text-subtitle-2 mb-2">{{ item.latest_title }}</div>
+                      <div class="text-body-2 mb-3">{{ item.latest_message }}</div>
+                      <div v-if="item.latest_metadata && Object.keys(item.latest_metadata).length">
+                        <div class="text-caption font-weight-bold mb-1">Metadata</div>
+                        <div v-for="(value, key) in item.latest_metadata" :key="key" class="text-caption">
+                          <strong>{{ key }}:</strong> {{ formatMetadataValue(key, value) }}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+              </v-data-table>
+            </v-card-text>
+          </v-card>
+        </v-window-item>
+
         <!-- ========== HISTORY TAB ========== -->
         <v-window-item value="history">
           <v-card flat>
@@ -119,9 +217,10 @@
                 :loading="store.loading"
                 items-per-page="25"
                 sort-by="timestamp"
+                show-expand
               >
                 <template #item.timestamp="{ item }">
-                  {{ new Date(item.timestamp).toLocaleString() }}
+                  {{ formatDate(item.timestamp) }}
                 </template>
                 <template #item.notification.severity="{ item }">
                   <v-chip
@@ -132,7 +231,64 @@
                     {{ item.notification?.severity }}
                   </v-chip>
                 </template>
+                <template #item.incidentId="{ item }">
+                  <span v-if="item.incidentId" class="text-caption" :title="item.incidentId">
+                    {{ item.incidentId.substring(0, 12) }}...
+                  </span>
+                  <span v-else class="text-caption text-grey">-</span>
+                </template>
+                <template #expanded-row="{ columns, item }">
+                  <tr>
+                    <td :colspan="columns.length" class="pa-4">
+                      <div class="text-body-2 mb-2">{{ item.notification?.message }}</div>
+                      <div v-if="item.notification?.metadata && Object.keys(item.notification.metadata).length">
+                        <div class="text-caption font-weight-bold mb-1">Metadata</div>
+                        <div v-for="(value, key) in item.notification.metadata" :key="key" class="text-caption">
+                          <strong>{{ key }}:</strong> {{ formatMetadataValue(key, value) }}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
               </v-data-table>
+            </v-card-text>
+          </v-card>
+        </v-window-item>
+
+        <!-- ========== SETTINGS TAB ========== -->
+        <v-window-item value="settings">
+          <v-card flat>
+            <v-card-text>
+              <v-row>
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model.number="settingsForm.pollingIntervalSeconds"
+                    label="Polling Interval (seconds)"
+                    type="number"
+                    :min="60"
+                    :max="3600"
+                    hint="How often the backend checks for notification triggers (60-3600)"
+                    persistent-hint
+                  ></v-text-field>
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model.number="settingsForm.cooldownMinutes"
+                    label="Cooldown Duration (minutes)"
+                    type="number"
+                    :min="5"
+                    :max="1440"
+                    hint="Minimum time before re-sending a notification for the same incident (5-1440)"
+                    persistent-hint
+                  ></v-text-field>
+                </v-col>
+              </v-row>
+              <div class="d-flex justify-end mt-4">
+                <v-btn color="primary" @click="saveSettings" :loading="store.loading">
+                  <v-icon start>mdi-content-save</v-icon>
+                  Save Settings
+                </v-btn>
+              </div>
             </v-card-text>
           </v-card>
         </v-window-item>
@@ -276,7 +432,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useNotificationRulesStore } from '@/store/notificationRules';
 import { useFeatureFlagStore } from '@/store/featureFlags';
@@ -308,11 +464,23 @@ const channelHeaders = [
   { title: 'Actions', key: 'actions', sortable: false },
 ];
 
+const incidentHeaders = [
+  { title: 'Status', key: 'status', width: '100px' },
+  { title: 'Rule', key: 'rule_id' },
+  { title: 'Target', key: 'target_label' },
+  { title: 'Severity', key: 'severity', width: '100px' },
+  { title: 'First Seen', key: 'first_seen' },
+  { title: 'Last Seen', key: 'last_seen' },
+  { title: 'Count', key: 'occurrence_count', width: '80px' },
+  { title: 'Actions', key: 'actions', sortable: false, width: '160px' },
+];
+
 const historyHeaders = [
   { title: 'Timestamp', key: 'timestamp' },
   { title: 'Rule', key: 'notification.ruleId' },
   { title: 'Message', key: 'notification.title' },
   { title: 'Severity', key: 'notification.severity' },
+  { title: 'Incident', key: 'incidentId', width: '130px' },
 ];
 
 const ruleTypes = [
@@ -321,6 +489,43 @@ const ruleTypes = [
   { title: 'Proportion', value: 'proportion' },
   { title: 'Subgraph Upgrade', value: 'subgraph_upgrade' },
 ];
+
+// --- Incident filtering ---
+const incidentStatusFilter = ref('open');
+const incidentStatusOptions = [
+  { title: 'Open', value: 'open' },
+  { title: 'Acknowledged', value: 'acknowledged' },
+  { title: 'Resolved', value: 'resolved' },
+  { title: 'All', value: 'all' },
+];
+
+function loadIncidents() {
+  store.fetchIncidents(incidentStatusFilter.value);
+}
+
+async function acknowledgeIncident(item) {
+  await store.acknowledgeIncident(item.id);
+  loadIncidents();
+}
+
+async function resolveIncident(item) {
+  await store.resolveIncident(item.id);
+  loadIncidents();
+}
+
+// --- Settings ---
+const settingsForm = ref({
+  pollingIntervalSeconds: 600,
+  cooldownMinutes: 60,
+});
+
+async function saveSettings() {
+  await store.updateSettings({
+    pollingIntervalSeconds: Math.max(60, Math.min(3600, settingsForm.value.pollingIntervalSeconds)),
+    cooldownMinutes: Math.max(5, Math.min(1440, settingsForm.value.cooldownMinutes)),
+  });
+  settingsForm.value = { ...store.settings };
+}
 
 // --- Rule Dialog ---
 const ruleDialogOpen = ref(false);
@@ -470,6 +675,66 @@ function severityColor(severity) {
     default: return 'grey';
   }
 }
+
+function incidentStatusColor(status) {
+  switch (status) {
+    case 'open': return 'error';
+    case 'acknowledged': return 'warning';
+    case 'resolved': return 'success';
+    default: return 'grey';
+  }
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '-';
+  return new Date(dateStr).toLocaleString();
+}
+
+function truncateHash(value) {
+  if (!value || value.length < 12) return value || '-';
+  if (value.startsWith('0x')) {
+    return `${value.substring(0, 8)}...${value.substring(value.length - 6)}`;
+  }
+  if (value.startsWith('Qm') || value.startsWith('ba')) {
+    return `${value.substring(0, 8)}...${value.substring(value.length - 4)}`;
+  }
+  return value;
+}
+
+function formatMetadataValue(key, value) {
+  if (value === null || value === undefined) return '-';
+
+  if (key === 'subgraphId') {
+    return truncateHash(String(value));
+  }
+  if (key === 'apr') {
+    return `${(Number(value) * 100).toFixed(1)}%`;
+  }
+  if (key === 'allocatedGRT' || key === 'allocatedTokens') {
+    return Number(value).toLocaleString();
+  }
+  if (key === 'signalProportion' || key === 'stakeProportion') {
+    return `${(Number(value) * 100).toFixed(4)}%`;
+  }
+  if (key === 'ratio' || key === 'threshold') {
+    return Number(value).toFixed(4);
+  }
+  if (key === 'epochDuration' || key === 'thresholdEpochs') {
+    return `${value} epochs`;
+  }
+  return String(value);
+}
+
+// --- Tab change: load data for active tab ---
+watch(tab, (newTab) => {
+  if (newTab === 'incidents') {
+    loadIncidents();
+  } else if (newTab === 'settings') {
+    store.fetchSettings().then(() => {
+      settingsForm.value = { ...store.settings };
+    });
+  }
+});
 
 // --- Lifecycle ---
 onMounted(async () => {

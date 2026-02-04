@@ -8,25 +8,47 @@ import { SignalDropRule } from './rules/SignalDropRule.js';
 import { ProportionRule } from './rules/ProportionRule.js';
 import { SubgraphUpgradeRule } from './rules/SubgraphUpgradeRule.js';
 import { DiscordChannel } from './channels/DiscordChannel.js';
+import type { SqliteStore } from '../../db/sqliteStore.js';
 
-const DEFAULT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+const DEFAULT_COOLDOWN_MINUTES = 60;
 
 export interface HistoryRecord {
   id: string;
+  incidentId?: string;
   notification: Notification;
   channelIds: string[];
   timestamp: string;
 }
 
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function deriveTargetKey(ruleId: string, notification: Notification): { key: string; label: string } {
+  const meta = notification.metadata || {};
+  const name = meta.subgraphName as string | undefined;
+  const ipfs = (meta.deploymentIpfsHash || meta.latestDeploymentHash) as string | undefined;
+
+  if (meta.allocationId) {
+    const label = name && ipfs ? `${name} (${ipfs})` : name || ipfs || (meta.allocationId as string);
+    return { key: `allocation:${meta.allocationId}`, label };
+  }
+  if (meta.subgraphId) {
+    const label = name && ipfs ? `${name} (${ipfs})` : name || (meta.subgraphId as string);
+    return { key: `subgraph:${meta.subgraphId}`, label };
+  }
+  return { key: `global:${ruleId}`, label: ruleId };
+}
+
 export class NotificationEngine {
-  private cooldownMap = new Map<string, number>();
   private previousState: PreviousState = {
     allocations: [],
   };
-  private history: HistoryRecord[] = [];
+  private store: SqliteStore;
   private onHistoryRecord?: (record: HistoryRecord) => void;
 
-  constructor(options?: { onHistoryRecord?: (record: HistoryRecord) => void }) {
+  constructor(options: { store: SqliteStore; onHistoryRecord?: (record: HistoryRecord) => void }) {
+    this.store = options.store;
     this.onHistoryRecord = options?.onHistoryRecord;
   }
 
@@ -52,8 +74,19 @@ export class NotificationEngine {
       previousState: this.previousState,
     };
 
-    // Phase 1: Collect all triggered notifications (applying cooldowns)
-    const pending: Notification[] = [];
+    const cooldownMinutes = parseInt(
+      this.store.getSetting('cooldownMinutes') || String(DEFAULT_COOLDOWN_MINUTES),
+      10,
+    );
+    const cooldownMs = cooldownMinutes * 60 * 1000;
+    const now = new Date();
+    const nowIso = now.toISOString();
+
+    // Track which rule:target combos fired this cycle for auto-resolution
+    const firedKeys = new Set<string>();
+
+    // Phase 1: Evaluate rules, manage incidents, decide what to send
+    const toSend: Array<{ notification: Notification; incidentId: string }> = [];
     const filterSummaries = new Map<string, string>();
 
     for (const rule of rules) {
@@ -66,29 +99,69 @@ export class NotificationEngine {
       if (!result.triggered) continue;
 
       for (const notification of result.notifications) {
-        const allocationId =
-          (notification.metadata?.allocationId as string) ??
-          (notification.metadata?.subgraphId as string) ??
-          'global';
-        const cooldownKey = `${rule.id}:${allocationId}`;
+        const { key: targetKey, label: targetLabel } = deriveTargetKey(rule.id, notification);
+        const incidentKey = `${rule.id}:${targetKey}`;
+        firedKeys.add(incidentKey);
 
-        if (this.isOnCooldown(cooldownKey)) continue;
+        const sentChannelIds = channels.map((c) => c.id);
+        const existing = this.store.getActiveIncident(rule.id, targetKey);
 
-        this.setCooldown(cooldownKey);
-        pending.push(notification);
+        if (existing) {
+          // Update existing incident metadata
+          this.store.updateIncident(existing.id, {
+            last_seen: nowIso,
+            occurrence_count: existing.occurrence_count + 1,
+            latest_title: notification.title,
+            latest_message: notification.message,
+            latest_metadata: (notification.metadata || {}) as Record<string, unknown>,
+            severity: notification.severity,
+            channel_ids: sentChannelIds,
+          });
+
+          // Skip re-notification for acknowledged incidents
+          if (existing.status === 'acknowledged') {
+            continue;
+          }
+
+          // Check cooldown: send again only if enough time has passed since last notification
+          const lastNotified = new Date(existing.last_notified_at || existing.first_seen).getTime();
+          if (now.getTime() - lastNotified >= cooldownMs) {
+            toSend.push({ notification, incidentId: existing.id });
+          }
+        } else {
+          // Create new incident
+          const incidentId = generateId();
+          this.store.createIncident({
+            id: incidentId,
+            rule_id: rule.id,
+            target_key: targetKey,
+            target_label: targetLabel,
+            severity: notification.severity,
+            status: 'open',
+            auto_resolve: 1,
+            first_seen: nowIso,
+            last_seen: nowIso,
+            last_notified_at: nowIso,
+            resolved_at: null,
+            occurrence_count: 1,
+            latest_title: notification.title,
+            latest_message: notification.message,
+            latest_metadata: (notification.metadata || {}) as Record<string, unknown>,
+            channel_ids: sentChannelIds,
+          });
+
+          toSend.push({ notification, incidentId });
+        }
       }
     }
 
     // Phase 2: Send batch to each channel
-    const records: HistoryRecord[] = [];
-
-    if (pending.length > 0 && channels.length > 0) {
-      // Only include filter summaries alongside real notifications — never send a
-      // digest containing only summaries, as that would repeat every poll cycle.
+    if (toSend.length > 0 && channels.length > 0) {
+      const notifications = toSend.map((s) => s.notification);
       const summaries = filterSummaries.size > 0 ? filterSummaries : undefined;
       for (const channel of channels) {
         try {
-          await channel.sendBatch(pending, summaries);
+          await channel.sendBatch(notifications, summaries);
         } catch (err) {
           console.error(
             `Failed to send batch via channel "${channel.name}" (${channel.id}):`,
@@ -98,38 +171,39 @@ export class NotificationEngine {
       }
     }
 
-    // Phase 3: Create history records
+    // Phase 3: Create history records and update last_notified_at
+    const records: HistoryRecord[] = [];
     const sentChannelIds = channels.map((c) => c.id);
-    for (const notification of pending) {
+
+    for (const { notification, incidentId } of toSend) {
       const record: HistoryRecord = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        id: generateId(),
+        incidentId,
         notification,
         channelIds: channels.length > 0 ? sentChannelIds : [],
-        timestamp: new Date().toISOString(),
+        timestamp: nowIso,
       };
 
       records.push(record);
-      this.history.push(record);
+
+      // Mark when this incident was last notified
+      this.store.updateIncident(incidentId, { last_notified_at: nowIso });
 
       if (this.onHistoryRecord) {
         this.onHistoryRecord(record);
       }
     }
 
+    // Phase 4: Auto-resolve incidents whose conditions no longer fire
+    const resolved = this.store.autoResolveIncidents(firedKeys);
+    if (resolved > 0) {
+      console.log(`Auto-resolved ${resolved} incident(s)`);
+    }
+
     // Update previous state for next evaluation
     this.updatePreviousState(allocations);
 
     return records;
-  }
-
-  private isOnCooldown(key: string): boolean {
-    const lastTriggered = this.cooldownMap.get(key);
-    if (!lastTriggered) return false;
-    return Date.now() - lastTriggered < DEFAULT_COOLDOWN_MS;
-  }
-
-  private setCooldown(key: string): void {
-    this.cooldownMap.set(key, Date.now());
   }
 
   private updatePreviousState(allocations: Allocation[]): void {
@@ -167,13 +241,5 @@ export class NotificationEngine {
         console.warn(`Unknown channel type: ${config.type}`);
         return null;
     }
-  }
-
-  getHistory(): HistoryRecord[] {
-    return this.history;
-  }
-
-  clearHistory(): void {
-    this.history = [];
   }
 }

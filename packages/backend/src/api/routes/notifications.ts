@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { JsonStore } from '../../db/jsonStore.js';
+import { SqliteStore } from '../../db/sqliteStore.js';
 import type { RuleConfig } from '../../services/notifications/rules/Rule.js';
 import type { ChannelConfig } from '../../services/notifications/channels/Channel.js';
+import type { PollingScheduler } from '../../services/poller/scheduler.js';
 
-export function createNotificationRoutes(store: JsonStore): Router {
+export function createNotificationRoutes(store: SqliteStore, scheduler?: PollingScheduler): Router {
   const router = Router();
 
   // --- Rules ---
@@ -232,6 +233,115 @@ export function createNotificationRoutes(store: JsonStore): Router {
     } catch (err) {
       console.error('Failed to clear history:', err);
       res.status(500).json({ error: 'Failed to clear history' });
+    }
+  });
+
+  // --- Incidents ---
+
+  router.get('/api/notifications/incidents', async (req: Request, res: Response) => {
+    try {
+      const status = (req.query.status as string) || 'open';
+      const limit = parseInt((req.query.limit as string) || '100', 10);
+      const offset = parseInt((req.query.offset as string) || '0', 10);
+      const incidents = store.getIncidents({ status, limit, offset });
+      res.json(incidents);
+    } catch (err) {
+      console.error('Failed to get incidents:', err);
+      res.status(500).json({ error: 'Failed to get incidents' });
+    }
+  });
+
+  router.get('/api/notifications/incidents/:id', async (req: Request, res: Response) => {
+    try {
+      const incident = store.getIncidentById(req.params.id);
+      if (!incident) {
+        res.status(404).json({ error: 'Incident not found' });
+        return;
+      }
+      res.json(incident);
+    } catch (err) {
+      console.error('Failed to get incident:', err);
+      res.status(500).json({ error: 'Failed to get incident' });
+    }
+  });
+
+  router.put('/api/notifications/incidents/:id/acknowledge', async (req: Request, res: Response) => {
+    try {
+      const incident = store.getIncidentById(req.params.id);
+      if (!incident) {
+        res.status(404).json({ error: 'Incident not found' });
+        return;
+      }
+      store.updateIncident(req.params.id, { status: 'acknowledged' });
+      res.json({ ...incident, status: 'acknowledged' });
+    } catch (err) {
+      console.error('Failed to acknowledge incident:', err);
+      res.status(500).json({ error: 'Failed to acknowledge incident' });
+    }
+  });
+
+  router.put('/api/notifications/incidents/:id/resolve', async (req: Request, res: Response) => {
+    try {
+      const incident = store.getIncidentById(req.params.id);
+      if (!incident) {
+        res.status(404).json({ error: 'Incident not found' });
+        return;
+      }
+      store.updateIncident(req.params.id, {
+        status: 'resolved',
+        resolved_at: new Date().toISOString(),
+      });
+      res.json({ ...incident, status: 'resolved', resolved_at: new Date().toISOString() });
+    } catch (err) {
+      console.error('Failed to resolve incident:', err);
+      res.status(500).json({ error: 'Failed to resolve incident' });
+    }
+  });
+
+  // --- Settings ---
+
+  router.get('/api/notifications/settings', async (_req: Request, res: Response) => {
+    try {
+      const settings = store.getSettings();
+      res.json({
+        pollingIntervalSeconds: parseInt(settings.pollingIntervalSeconds || '600', 10),
+        cooldownMinutes: parseInt(settings.cooldownMinutes || '60', 10),
+      });
+    } catch (err) {
+      console.error('Failed to get settings:', err);
+      res.status(500).json({ error: 'Failed to get settings' });
+    }
+  });
+
+  router.put('/api/notifications/settings', async (req: Request, res: Response) => {
+    try {
+      const { pollingIntervalSeconds, cooldownMinutes } = req.body as {
+        pollingIntervalSeconds?: number;
+        cooldownMinutes?: number;
+      };
+
+      if (pollingIntervalSeconds !== undefined) {
+        const clamped = Math.max(60, Math.min(3600, pollingIntervalSeconds));
+        store.setSetting('pollingIntervalSeconds', String(clamped));
+
+        if (scheduler) {
+          scheduler.updateInterval(clamped);
+        }
+      }
+
+      if (cooldownMinutes !== undefined) {
+        const clamped = Math.max(5, Math.min(1440, cooldownMinutes));
+        store.setSetting('cooldownMinutes', String(clamped));
+      }
+
+      const settings = store.getSettings();
+      res.json({
+        pollingIntervalSeconds: parseInt(settings.pollingIntervalSeconds || '600', 10),
+        cooldownMinutes: parseInt(settings.cooldownMinutes || '60', 10),
+      });
+    } catch (err) {
+      console.error('Failed to update settings:', err);
+      res.status(500).json({ error: 'Failed to update settings' });
     }
   });
 
