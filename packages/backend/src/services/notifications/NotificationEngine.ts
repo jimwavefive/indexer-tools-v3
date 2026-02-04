@@ -1,12 +1,14 @@
 import type { Allocation } from '@indexer-tools/shared';
 import type { Channel, Notification } from './channels/Channel.js';
-import type { Rule, RuleContext, NetworkDataSnapshot, PreviousState } from './rules/Rule.js';
+import type { Rule, RuleContext, NetworkDataSnapshot, PreviousState, DeploymentStatus } from './rules/Rule.js';
 import type { RuleConfig } from './rules/Rule.js';
 import type { ChannelConfig } from './channels/Channel.js';
 import { AllocationDurationRule } from './rules/AllocationDurationRule.js';
 import { SignalDropRule } from './rules/SignalDropRule.js';
 import { ProportionRule } from './rules/ProportionRule.js';
 import { SubgraphUpgradeRule } from './rules/SubgraphUpgradeRule.js';
+import { FailedSubgraphAllocatedRule } from './rules/FailedSubgraphAllocatedRule.js';
+import { BehindChainheadAllocatedRule } from './rules/BehindChainheadAllocatedRule.js';
 import { DiscordChannel } from './channels/DiscordChannel.js';
 import type { SqliteStore } from '../../db/sqliteStore.js';
 
@@ -59,6 +61,7 @@ export class NotificationEngine {
     networkData: NetworkDataSnapshot,
     ruleConfigs: RuleConfig[],
     channelConfigs: ChannelConfig[],
+    deploymentStatuses?: Map<string, DeploymentStatus>,
   ): Promise<HistoryRecord[]> {
     const rules = ruleConfigs
       .filter((r) => r.enabled)
@@ -74,6 +77,7 @@ export class NotificationEngine {
       allocations,
       networkData,
       previousState: this.previousState,
+      deploymentStatuses,
     };
 
     const cooldownMinutes = parseInt(
@@ -224,6 +228,10 @@ export class NotificationEngine {
         return new ProportionRule(config);
       case 'subgraph_upgrade':
         return new SubgraphUpgradeRule(config);
+      case 'failed_subgraph':
+        return new FailedSubgraphAllocatedRule(config);
+      case 'behind_chainhead':
+        return new BehindChainheadAllocatedRule(config);
       default:
         console.warn(`Unknown rule type: ${config.type}`);
         return null;

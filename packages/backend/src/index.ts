@@ -124,10 +124,18 @@ if (process.env.FEATURE_NOTIFICATIONS_ENABLED === 'true') {
       10,
     );
 
+    const indexerStatusEndpoint = process.env.INDEXER_STATUS_ENDPOINT;
+    if (indexerStatusEndpoint) {
+      console.log(`Indexer status endpoint override: ${indexerStatusEndpoint}`);
+    } else {
+      console.log('INDEXER_STATUS_ENDPOINT not set — will resolve from indexer on-chain URL');
+    }
+
     scheduler = new PollingScheduler({
       store,
       indexerAddress,
       pollingIntervalSeconds,
+      indexerStatusEndpoint,
     });
 
     scheduler.start();

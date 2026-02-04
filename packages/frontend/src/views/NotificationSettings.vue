@@ -167,14 +167,14 @@
                 </template>
                 <template #item.actions="{ item }">
                   <v-btn
-                    v-if="item.status === 'open'"
+                    v-if="item.status === 'open' && getAllowedActions(item.rule_id).includes('acknowledge')"
                     size="x-small"
                     variant="outlined"
                     class="mr-1"
                     @click="acknowledgeIncident(item)"
                   >Ack</v-btn>
                   <v-btn
-                    v-if="item.status !== 'resolved'"
+                    v-if="item.status !== 'resolved' && getAllowedActions(item.rule_id).includes('resolve')"
                     size="x-small"
                     variant="outlined"
                     color="success"
@@ -185,13 +185,45 @@
                   <tr>
                     <td :colspan="columns.length" class="pa-4">
                       <div class="text-subtitle-2 mb-2">{{ item.latest_title }}</div>
-                      <div class="text-body-2 mb-3">{{ item.latest_message }}</div>
-                      <div v-if="item.latest_metadata && Object.keys(item.latest_metadata).length">
-                        <div class="text-caption font-weight-bold mb-1">Metadata</div>
-                        <div v-for="(value, key) in item.latest_metadata" :key="key" class="text-caption">
-                          <strong>{{ key }}:</strong> {{ formatMetadataValue(key, value) }}
-                        </div>
+                      <!-- Subgraphs detail table (replaces message for these rule types) -->
+                      <div v-if="item.latest_metadata?.subgraphs?.length">
+                        <template v-for="(value, key) in item.latest_metadata" :key="key">
+                          <div v-if="shouldShowMetadataKey(key) && !isSubgraphsArray(key, value)" class="text-caption mb-1">
+                            <strong>{{ metadataLabel(key) }}:</strong> {{ formatMetadataValue(key, value) }}
+                          </div>
+                        </template>
+                        <v-table density="compact" class="text-caption mt-2">
+                          <thead>
+                            <tr>
+                              <th>Name</th>
+                              <th>Deployment</th>
+                              <th class="text-right">GRT</th>
+                              <th v-if="hasBlocksBehind(item.latest_metadata.subgraphs)" class="text-right">Blocks Behind</th>
+                              <th v-if="hasErrorMessage(item.latest_metadata.subgraphs)">Error</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="(sg, idx) in item.latest_metadata.subgraphs" :key="idx">
+                              <td>{{ sg.name }}</td>
+                              <td style="font-family: monospace; font-size: 0.75rem">{{ sg.deploymentHash }}</td>
+                              <td class="text-right">{{ Number(sg.allocatedGRT).toLocaleString() }}</td>
+                              <td v-if="hasBlocksBehind(item.latest_metadata.subgraphs)" class="text-right">{{ sg.blocksBehind ? Number(sg.blocksBehind).toLocaleString() : '-' }}</td>
+                              <td v-if="hasErrorMessage(item.latest_metadata.subgraphs)" class="text-caption" style="max-width: 400px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis" :title="sg.errorMessage">{{ sg.errorMessage || '-' }}</td>
+                            </tr>
+                          </tbody>
+                        </v-table>
                       </div>
+                      <!-- Standard message + metadata for other rule types -->
+                      <template v-else>
+                        <div class="text-body-2 mb-3">{{ item.latest_message }}</div>
+                        <div v-if="item.latest_metadata">
+                          <template v-for="(value, key) in item.latest_metadata" :key="key">
+                            <div v-if="shouldShowMetadataKey(key)" class="text-caption">
+                              <strong>{{ metadataLabel(key) }}:</strong> {{ formatMetadataValue(key, value) }}
+                            </div>
+                          </template>
+                        </div>
+                      </template>
                     </td>
                   </tr>
                 </template>
@@ -240,13 +272,43 @@
                 <template #expanded-row="{ columns, item }">
                   <tr>
                     <td :colspan="columns.length" class="pa-4">
-                      <div class="text-body-2 mb-2">{{ item.notification?.message }}</div>
-                      <div v-if="item.notification?.metadata && Object.keys(item.notification.metadata).length">
-                        <div class="text-caption font-weight-bold mb-1">Metadata</div>
-                        <div v-for="(value, key) in item.notification.metadata" :key="key" class="text-caption">
-                          <strong>{{ key }}:</strong> {{ formatMetadataValue(key, value) }}
-                        </div>
+                      <div v-if="item.notification?.metadata?.subgraphs?.length">
+                        <template v-for="(value, key) in item.notification.metadata" :key="key">
+                          <div v-if="shouldShowMetadataKey(key) && !isSubgraphsArray(key, value)" class="text-caption mb-1">
+                            <strong>{{ metadataLabel(key) }}:</strong> {{ formatMetadataValue(key, value) }}
+                          </div>
+                        </template>
+                        <v-table density="compact" class="text-caption mt-2">
+                          <thead>
+                            <tr>
+                              <th>Name</th>
+                              <th>Deployment</th>
+                              <th class="text-right">GRT</th>
+                              <th v-if="hasBlocksBehind(item.notification.metadata.subgraphs)" class="text-right">Blocks Behind</th>
+                              <th v-if="hasErrorMessage(item.notification.metadata.subgraphs)">Error</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="(sg, idx) in item.notification.metadata.subgraphs" :key="idx">
+                              <td>{{ sg.name }}</td>
+                              <td style="font-family: monospace; font-size: 0.75rem">{{ sg.deploymentHash }}</td>
+                              <td class="text-right">{{ Number(sg.allocatedGRT).toLocaleString() }}</td>
+                              <td v-if="hasBlocksBehind(item.notification.metadata.subgraphs)" class="text-right">{{ sg.blocksBehind ? Number(sg.blocksBehind).toLocaleString() : '-' }}</td>
+                              <td v-if="hasErrorMessage(item.notification.metadata.subgraphs)" class="text-caption" style="max-width: 400px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis" :title="sg.errorMessage">{{ sg.errorMessage || '-' }}</td>
+                            </tr>
+                          </tbody>
+                        </v-table>
                       </div>
+                      <template v-else>
+                        <div class="text-body-2 mb-2">{{ item.notification?.message }}</div>
+                        <div v-if="item.notification?.metadata">
+                          <template v-for="(value, key) in item.notification.metadata" :key="key">
+                            <div v-if="shouldShowMetadataKey(key)" class="text-caption">
+                              <strong>{{ metadataLabel(key) }}:</strong> {{ formatMetadataValue(key, value) }}
+                            </div>
+                          </template>
+                        </div>
+                      </template>
                     </td>
                   </tr>
                 </template>
@@ -348,6 +410,42 @@
               persistent-hint
               class="mt-2"
             ></v-text-field>
+          </div>
+          <div v-if="ruleForm.type === 'failed_subgraph'" class="mb-2">
+            <v-text-field
+              v-model.number="ruleForm.conditions.minGrt"
+              label="Min GRT Allocated"
+              type="number"
+              hint="Only alert for failed subgraphs with at least this much GRT allocated"
+              persistent-hint
+            ></v-text-field>
+          </div>
+          <div v-if="ruleForm.type === 'behind_chainhead'" class="mb-2">
+            <v-text-field
+              v-model.number="ruleForm.conditions.blocksBehindThreshold"
+              label="Blocks Behind Threshold"
+              type="number"
+              hint="Alert when a subgraph is at least this many blocks behind chainhead"
+              persistent-hint
+            ></v-text-field>
+          </div>
+
+          <div class="mb-2">
+            <div class="text-caption font-weight-bold mb-1">Allowed Incident Actions</div>
+            <v-checkbox
+              v-model="ruleForm.conditions.allowedActions"
+              label="Acknowledge"
+              value="acknowledge"
+              hide-details
+              density="compact"
+            ></v-checkbox>
+            <v-checkbox
+              v-model="ruleForm.conditions.allowedActions"
+              label="Resolve"
+              value="resolve"
+              hide-details
+              density="compact"
+            ></v-checkbox>
           </div>
 
           <v-select
@@ -489,6 +587,8 @@ const ruleTypes = [
   { title: 'Signal Drop', value: 'signal_drop' },
   { title: 'Proportion', value: 'proportion' },
   { title: 'Subgraph Upgrade', value: 'subgraph_upgrade' },
+  { title: 'Failed Subgraph', value: 'failed_subgraph' },
+  { title: 'Behind Chainhead', value: 'behind_chainhead' },
 ];
 
 // --- Incident filtering ---
@@ -538,7 +638,7 @@ function defaultRuleForm() {
     name: '',
     type: 'allocation_duration',
     enabled: true,
-    conditions: {},
+    conditions: { allowedActions: ['acknowledge', 'resolve'] },
     channels: [],
   };
 }
@@ -546,11 +646,15 @@ function defaultRuleForm() {
 function openRuleDialog(rule) {
   if (rule) {
     editingRule.value = rule;
+    const conditions = { ...(rule.conditions || {}) };
+    if (!Array.isArray(conditions.allowedActions)) {
+      conditions.allowedActions = ['acknowledge', 'resolve'];
+    }
     ruleForm.value = {
       name: rule.name,
       type: rule.type,
       enabled: rule.enabled,
-      conditions: { ...(rule.conditions || {}) },
+      conditions,
       channels: rule.channels ? [...rule.channels] : [],
     };
   } else {
@@ -703,6 +807,40 @@ function truncateHash(value) {
   return value;
 }
 
+const METADATA_HIDDEN_KEYS = new Set(['subgraphs', 'count']);
+
+const METADATA_LABEL_MAP = {
+  minGrt: 'Min GRT Filter',
+  blocksBehindThreshold: 'Blocks Behind Threshold',
+  count: 'Count',
+  allocatedGRT: 'Allocated GRT',
+  apr: 'APR',
+  epochDuration: 'Epoch Duration',
+  thresholdEpochs: 'Threshold',
+  ratio: 'Ratio',
+  threshold: 'Threshold',
+};
+
+function metadataLabel(key) {
+  return METADATA_LABEL_MAP[key] || key;
+}
+
+function shouldShowMetadataKey(key) {
+  return !METADATA_HIDDEN_KEYS.has(key);
+}
+
+function isSubgraphsArray(key, value) {
+  return key === 'subgraphs' && Array.isArray(value);
+}
+
+function hasBlocksBehind(subgraphs) {
+  return subgraphs.some((sg) => sg.blocksBehind !== undefined);
+}
+
+function hasErrorMessage(subgraphs) {
+  return subgraphs.some((sg) => sg.errorMessage);
+}
+
 function formatMetadataValue(key, value) {
   if (value === null || value === undefined) return '-';
 
@@ -712,7 +850,7 @@ function formatMetadataValue(key, value) {
   if (key === 'apr') {
     return `${(Number(value) * 100).toFixed(1)}%`;
   }
-  if (key === 'allocatedGRT' || key === 'allocatedTokens') {
+  if (key === 'allocatedGRT' || key === 'allocatedTokens' || key === 'minGrt') {
     return Number(value).toLocaleString();
   }
   if (key === 'signalProportion' || key === 'stakeProportion') {
@@ -724,7 +862,17 @@ function formatMetadataValue(key, value) {
   if (key === 'epochDuration' || key === 'thresholdEpochs') {
     return `${value} epochs`;
   }
+  if (key === 'blocksBehindThreshold') {
+    return `${Number(value).toLocaleString()} blocks`;
+  }
   return String(value);
+}
+
+function getAllowedActions(ruleId) {
+  const rule = store.rules.find((r) => r.id === ruleId);
+  const actions = rule?.conditions?.allowedActions;
+  if (!Array.isArray(actions)) return ['acknowledge', 'resolve'];
+  return actions;
 }
 
 // --- Tab change: load data for active tab ---
@@ -748,3 +896,4 @@ onMounted(async () => {
   ]);
 });
 </script>
+

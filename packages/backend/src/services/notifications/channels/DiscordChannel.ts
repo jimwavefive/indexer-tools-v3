@@ -11,6 +11,8 @@ const RULE_LABELS: Record<string, { emoji: string; label: string }> = {
   'signal-drop': { emoji: '📉', label: 'Signal Dropped to Zero' },
   proportion: { emoji: '⚖️', label: 'Disproportionate Allocations' },
   'subgraph-upgrade': { emoji: '🔄', label: 'Subgraph Upgrades' },
+  'failed-subgraph': { emoji: '💀', label: 'Failed Subgraphs' },
+  'behind-chainhead': { emoji: '🐢', label: 'Behind Chainhead' },
 };
 
 interface TableColumn {
@@ -84,9 +86,11 @@ const METADATA_LABELS: Record<string, string> = {
   signalProportion: 'Signal Proportion',
   stakeProportion: 'Stake Proportion',
   signalledTokens: 'Signal',
+  minGrt: 'Min GRT Filter',
+  blocksBehindThreshold: 'Blocks Behind Threshold',
 };
 
-const METADATA_HIDDEN = new Set(['allocationId', 'deploymentIpfsHash', 'subgraphId', 'subgraphName']);
+const METADATA_HIDDEN = new Set(['allocationId', 'deploymentIpfsHash', 'subgraphId', 'subgraphName', 'subgraphs', 'count']);
 
 // Preferred display order — keys not listed here appear at the end in original order
 const METADATA_ORDER: string[] = [
@@ -227,7 +231,11 @@ export class DiscordChannel implements Channel {
       if (truncated) break;
 
       const ruleInfo = RULE_LABELS[ruleId] || { emoji: '🔔', label: ruleId };
-      const header = `### ${ruleInfo.emoji} ${ruleInfo.label} (${items.length})\n`;
+      // Use metadata count if available (single-notification rules pack count into metadata)
+      const itemCount = (items.length === 1 && typeof items[0].metadata?.count === 'number')
+        ? items[0].metadata.count as number
+        : items.length;
+      const header = `### ${ruleInfo.emoji} ${ruleInfo.label} (${itemCount})\n`;
 
       if (description.length + header.length > DESCRIPTION_LIMIT) {
         truncated = true;
@@ -236,45 +244,57 @@ export class DiscordChannel implements Channel {
       description += header;
 
       const tableSpec = RULE_TABLE_SPECS[ruleId];
-      const rows = items.map((item) => {
-        const nameMatch = item.message.match(/\*\*(.+?)\*\*/);
-        const name = nameMatch ? nameMatch[1] : 'Unknown';
-        const cells: string[] = [name];
-        if (tableSpec) {
-          for (const col of tableSpec.columns) {
-            cells.push(col.format(item));
-          }
-        }
-        return { cells, sortValue: tableSpec?.sortValue(item) ?? 0 };
-      });
 
-      if (tableSpec) {
-        rows.sort((a, b) =>
-          tableSpec.sortDirection === 'desc' ? b.sortValue - a.sortValue : a.sortValue - b.sortValue,
-        );
-      }
-
-      const headers = ['Name', ...(tableSpec?.columns.map((c) => c.header) ?? [])];
-      const colWidths = headers.map((h, i) =>
-        Math.max(h.length, ...rows.map((r) => r.cells[i].length)),
-      );
-
-      const hdrLine = headers.map((h, i) => (i === 0 ? h.padEnd(colWidths[i]) : h.padStart(colWidths[i]))).join('  ');
-      const sep = '─'.repeat(hdrLine.length);
-      let table = '```\n' + hdrLine + '\n' + sep + '\n';
-
-      for (const row of rows) {
-        const line = row.cells.map((c, i) => (i === 0 ? c.padEnd(colWidths[i]) : c.padStart(colWidths[i]))).join('  ') + '\n';
-        if (description.length + table.length + line.length + 4 > DESCRIPTION_LIMIT) {
+      // If no table spec and items contain pre-formatted messages, render directly
+      if (!tableSpec && items.length === 1) {
+        const msg = items[0].message + '\n\n';
+        if (description.length + msg.length > DESCRIPTION_LIMIT) {
           truncated = true;
           break;
         }
-        table += line;
+        description += msg;
         shownCount++;
-      }
+      } else {
+        const rows = items.map((item) => {
+          const nameMatch = item.message.match(/\*\*(.+?)\*\*/);
+          const name = nameMatch ? nameMatch[1] : 'Unknown';
+          const cells: string[] = [name];
+          if (tableSpec) {
+            for (const col of tableSpec.columns) {
+              cells.push(col.format(item));
+            }
+          }
+          return { cells, sortValue: tableSpec?.sortValue(item) ?? 0 };
+        });
 
-      table += '```\n';
-      description += table;
+        if (tableSpec) {
+          rows.sort((a, b) =>
+            tableSpec.sortDirection === 'desc' ? b.sortValue - a.sortValue : a.sortValue - b.sortValue,
+          );
+        }
+
+        const headers = ['Name', ...(tableSpec?.columns.map((c) => c.header) ?? [])];
+        const colWidths = headers.map((h, i) =>
+          Math.max(h.length, ...rows.map((r) => r.cells[i].length)),
+        );
+
+        const hdrLine = headers.map((h, i) => (i === 0 ? h.padEnd(colWidths[i]) : h.padStart(colWidths[i]))).join('  ');
+        const sep = '─'.repeat(hdrLine.length);
+        let table = '```\n' + hdrLine + '\n' + sep + '\n';
+
+        for (const row of rows) {
+          const line = row.cells.map((c, i) => (i === 0 ? c.padEnd(colWidths[i]) : c.padStart(colWidths[i]))).join('  ') + '\n';
+          if (description.length + table.length + line.length + 4 > DESCRIPTION_LIMIT) {
+            truncated = true;
+            break;
+          }
+          table += line;
+          shownCount++;
+        }
+
+        table += '```\n';
+        description += table;
+      }
 
       description += '\n';
     }
