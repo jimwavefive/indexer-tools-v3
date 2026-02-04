@@ -35,28 +35,42 @@ const DEFAULT_RULES: RuleConfig[] = [
     name: 'Allocation Duration Warning',
     type: 'allocation_duration',
     enabled: true,
-    conditions: { thresholdEpochs: 26 },
+    conditions: { thresholdEpochs: 26, allowedActions: ['acknowledge', 'resolve'] },
   },
   {
     id: 'signal-drop',
     name: 'Signal Drop to Zero',
     type: 'signal_drop',
     enabled: true,
-    conditions: {},
+    conditions: { allowedActions: ['acknowledge', 'resolve'] },
   },
   {
     id: 'proportion',
     name: 'Disproportionate Allocation',
     type: 'proportion',
     enabled: true,
-    conditions: { threshold: 0.5 },
+    conditions: { threshold: 0.5, allowedActions: ['acknowledge', 'resolve'] },
   },
   {
     id: 'subgraph-upgrade',
     name: 'Subgraph Deployment Upgrade',
     type: 'subgraph_upgrade',
     enabled: true,
-    conditions: { maxApr: 10, minGrt: 10000 },
+    conditions: { maxApr: 10, minGrt: 10000, allowedActions: ['acknowledge', 'resolve'] },
+  },
+  {
+    id: 'failed-subgraph',
+    name: 'Failed Subgraph Allocated',
+    type: 'failed_subgraph',
+    enabled: true,
+    conditions: { minGrt: 10000, allowedActions: [] },
+  },
+  {
+    id: 'behind-chainhead',
+    name: 'Behind Chainhead Allocated',
+    type: 'behind_chainhead',
+    enabled: true,
+    conditions: { blocksBehindThreshold: 5000, allowedActions: [] },
   },
 ];
 
@@ -167,6 +181,14 @@ export class SqliteStore {
         insertRule.run(rule.id, rule.name, rule.type, rule.enabled ? 1 : 0, JSON.stringify(rule.conditions));
       }
       console.log('Seeded default notification rules');
+    } else {
+      // Add any new default rules to existing databases (INSERT OR IGNORE preserves existing)
+      const insertNewRule = this.db.prepare(
+        'INSERT OR IGNORE INTO rules (id, name, type, enabled, conditions) VALUES (?, ?, ?, ?, ?)',
+      );
+      for (const rule of DEFAULT_RULES) {
+        insertNewRule.run(rule.id, rule.name, rule.type, rule.enabled ? 1 : 0, JSON.stringify(rule.conditions));
+      }
     }
   }
 

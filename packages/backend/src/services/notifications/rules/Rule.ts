@@ -1,6 +1,18 @@
 import type { Allocation } from '@indexer-tools/shared';
 import type { Notification } from '../channels/Channel.js';
 
+export interface DeploymentStatus {
+  subgraph: string; // deployment IPFS hash
+  health: 'healthy' | 'unhealthy' | 'failed';
+  synced: boolean;
+  fatalError?: { message: string; handler: string | null };
+  chains: Array<{
+    network: string;
+    chainHeadBlock: { number: string };
+    latestBlock: { number: string };
+  }>;
+}
+
 export interface NetworkDataSnapshot {
   totalTokensSignalled: string;
   networkGRTIssuancePerBlock: string;
@@ -14,6 +26,7 @@ export interface RuleContext {
   allocations: Allocation[];
   networkData: NetworkDataSnapshot;
   previousState: PreviousState;
+  deploymentStatuses?: Map<string, DeploymentStatus>;
 }
 
 export interface PreviousState {
