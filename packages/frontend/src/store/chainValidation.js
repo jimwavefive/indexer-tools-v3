@@ -5,7 +5,6 @@ import { useChainStore } from './chains';
 import { useEpochStore } from './epochStore';
 import { useSubgraphSettingStore } from './subgraphSettings';
 import { loadDefaultsConfig } from '@/plugins/defaultsConfig';
-import { ethers } from 'ethers';
 import gql from 'graphql-tag';
 const accountStore = useAccountStore();
 const chainStore = useChainStore();
@@ -23,6 +22,24 @@ const CHAIN_MAP = {
   "matic":"polygon",
   "mode-mainnet":"mode",
   "blast-mainnet":"blast",
+}
+
+async function fetchBlockHash(rpcUrl, blockNumber) {
+  const hexBlock = '0x' + blockNumber.toString(16);
+  const res = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'eth_getBlockByNumber',
+      params: [hexBlock, false],
+    }),
+  });
+  if (!res.ok) throw new Error(`RPC returned ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.result?.hash || null;
 }
 
 function getRpcUrl(chain) {
@@ -84,13 +101,12 @@ export const useChainValidationStore = defineStore('chainValidationStore', {
           this.chainStatus[this.getChains[i]].indexerBlockHash = data.blockHashFromNumber;
           if(data.blockHashFromNumber != null){
             const rpcUrl = getRpcUrl(this.getChains[i]);
-            const provider = new ethers.JsonRpcProvider(rpcUrl);
             const blockNumber = this.chainStatus[this.getChains[i]].blockNumber;
 
-            provider.getBlock(blockNumber)
-              .then(block => {
-                if (block) {
-                  this.chainStatus[this.getChains[i]].externalBlockHash = block.hash;
+            fetchBlockHash(rpcUrl, blockNumber)
+              .then(hash => {
+                if (hash) {
+                  this.chainStatus[this.getChains[i]].externalBlockHash = hash;
                 }
               })
               .catch(error => console.error('Chain validation error', error));

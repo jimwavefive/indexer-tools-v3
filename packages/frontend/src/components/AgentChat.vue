@@ -131,6 +131,8 @@
 
 <script setup>
 import { ref, watch, nextTick } from 'vue'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { useAgentStore } from '@/store/agent'
 
 const agentStore = useAgentStore()
@@ -146,22 +148,8 @@ const suggestedPrompts = [
 
 function renderMarkdown(text) {
   if (!text) return ''
-  let html = text
-    // Escape HTML
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-  // Code blocks
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
-  // Inline code
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
-  // Bold
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-  // Italic
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
-  // Line breaks
-  html = html.replace(/\n/g, '<br>')
-  return html
+  const raw = marked.parse(text, { async: false })
+  return DOMPurify.sanitize(raw)
 }
 
 function sendMessage() {

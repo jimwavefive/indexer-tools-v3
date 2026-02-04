@@ -41,10 +41,7 @@ router.post('/chat', async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     console.error('Agent chat error:', err);
-    res.status(500).json({
-      error: 'Agent encountered an error.',
-      details: err.message ?? 'Unknown error',
-    });
+    res.status(500).json({ error: 'Agent encountered an error.' });
   }
 });
 
@@ -61,7 +58,7 @@ router.get('/conversations', (_req: Request, res: Response) => {
     res.json({ conversations });
   } catch (err: any) {
     console.error('List conversations error:', err);
-    res.status(500).json({ error: err.message ?? 'Unknown error' });
+    res.status(500).json({ error: 'Failed to list conversations.' });
   }
 });
 
@@ -78,7 +75,7 @@ router.delete('/conversations/:id', (req: Request, res: Response) => {
     res.json({ deleted, conversationId: req.params.id });
   } catch (err: any) {
     console.error('Delete conversation error:', err);
-    res.status(500).json({ error: err.message ?? 'Unknown error' });
+    res.status(500).json({ error: 'Failed to delete conversation.' });
   }
 });
 

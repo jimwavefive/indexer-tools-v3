@@ -27,6 +27,22 @@ export async function getDeploymentHealth(args: {
   statusEndpoint: string;
   deploymentId: string;
 }): Promise<any> {
+  // Validate deploymentId to prevent GraphQL injection
+  if (!/^(Qm[a-zA-Z0-9]{44}|bafy[a-z0-9]+)$/.test(args.deploymentId)) {
+    throw new Error('Invalid deployment ID: must be an IPFS CIDv0 (Qm...) or CIDv1 (bafy...)');
+  }
+
+  // Validate statusEndpoint URL scheme
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(args.statusEndpoint);
+  } catch {
+    throw new Error('Invalid status endpoint URL');
+  }
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    throw new Error('Status endpoint must use http or https');
+  }
+
   const query = `{
     indexingStatuses(subgraphs: ["${args.deploymentId}"]) {
       subgraph
@@ -63,11 +79,15 @@ export async function getDeploymentHealth(args: {
     }
   }`;
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
   const response = await fetch(args.statusEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
+    signal: controller.signal,
   });
+  clearTimeout(timeout);
 
   if (!response.ok) {
     const text = await response.text();

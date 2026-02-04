@@ -24,9 +24,18 @@ if(localStorage.accounts){
   startChain = "arbitrum-one"
 }
 
-function createProvider(customRpc, defaultRpc) {
+const CHAIN_IDS = {
+  "mainnet": 1,
+  "arbitrum-one": 42161,
+  "sepolia": 11155111,
+  "arbitrum-sepolia": 421614,
+};
+
+function createProvider(customRpc, defaultRpc, chainId) {
   const url = customRpc || defaultRpc;
-  return new ethers.JsonRpcProvider(url);
+  if (!url) return null;
+  const network = ethers.Network.from(chainId);
+  return new ethers.JsonRpcProvider(url, network, { staticNetwork: network });
 }
 
 export const useChainStore = defineStore('chainStore', {
@@ -36,7 +45,7 @@ export const useChainStore = defineStore('chainStore', {
       id: "mainnet",
       default_rpc: defaultsConfig.rpcMainnet,
       block_explorer: "https://etherscan.io",
-      provider: createProvider(subgraphSettingStore.settings.rpc.mainnet, defaultsConfig.rpcMainnet),
+      provider: createProvider(subgraphSettingStore.settings.rpc.mainnet, defaultsConfig.rpcMainnet, CHAIN_IDS["mainnet"]),
       rewardsContractAddress: "0x9Ac758AB77733b4150A901ebd659cbF8cB93ED66",
       stakingContractAddress: "0xF55041E37E12cD407ad00CE2910B8269B01263b9",
       networkSubgraphClient: apolloClient,
@@ -48,7 +57,7 @@ export const useChainStore = defineStore('chainStore', {
       id: "arbitrum-one",
       default_rpc: defaultsConfig.rpcArbitrum,
       block_explorer: "https://arbiscan.io",
-      provider: createProvider(subgraphSettingStore.settings.rpc.arbitrum, defaultsConfig.rpcArbitrum),
+      provider: createProvider(subgraphSettingStore.settings.rpc.arbitrum, defaultsConfig.rpcArbitrum, CHAIN_IDS["arbitrum-one"]),
       rewardsContractAddress: "0x971B9d3d0Ae3ECa029CAB5eA1fB0F72c85e6a525",
       stakingContractAddress: "0x00669A4CF01450B64E8A2A20E9b1FCB71E61eF03",
       networkSubgraphClient: arbitrumApolloClient,
@@ -60,7 +69,7 @@ export const useChainStore = defineStore('chainStore', {
       id: "sepolia",
       default_rpc: defaultsConfig.rpcSepolia,
       block_explorer: "https://sepolia.etherscan.io",
-      provider: createProvider(subgraphSettingStore.settings.rpc.sepolia, defaultsConfig.rpcSepolia),
+      provider: createProvider(subgraphSettingStore.settings.rpc.sepolia, defaultsConfig.rpcSepolia, CHAIN_IDS["sepolia"]),
       rewardsContractAddress: "0x9a86322dEa5136C74ee6d1b06F4Ab9A6bB2724E0",
       stakingContractAddress: "0x14e9B07Dc56A0B03ac8A58453B5cCCB289d6ec90",
       networkSubgraphClient: sepoliaApolloClient,
@@ -72,7 +81,7 @@ export const useChainStore = defineStore('chainStore', {
       id: "arbitrum-sepolia",
       default_rpc: defaultsConfig.rpcArbitrumSepolia,
       block_explorer: "https://sepolia.arbiscan.io",
-      provider: createProvider(subgraphSettingStore.settings.rpc.arbitrumSepolia, defaultsConfig.rpcArbitrumSepolia),
+      provider: createProvider(subgraphSettingStore.settings.rpc.arbitrumSepolia, defaultsConfig.rpcArbitrumSepolia, CHAIN_IDS["arbitrum-sepolia"]),
       rewardsContractAddress: "0x00b9d319E3D09E83c62f453B44354049Dd93a345",
       stakingContractAddress: "0x865365C425f3A593Ffe698D9c4E6707D14d51e08",
       networkSubgraphClient: arbitrumSepoliaApolloClient,
@@ -111,11 +120,12 @@ export const useChainStore = defineStore('chainStore', {
 
     },
     updateProvider(chainIndex, rpcUrl) {
-      if (rpcUrl) {
-        this.chains[chainIndex].provider = new ethers.JsonRpcProvider(rpcUrl);
-      } else {
-        this.chains[chainIndex].provider = new ethers.JsonRpcProvider(this.chains[chainIndex].default_rpc);
-      }
+      const chain = this.chains[chainIndex];
+      const url = rpcUrl || chain.default_rpc;
+      const chainId = CHAIN_IDS[chain.id];
+      const network = chainId ? ethers.Network.from(chainId) : undefined;
+      const options = network ? { staticNetwork: network } : {};
+      chain.provider = new ethers.JsonRpcProvider(url, network, options);
     }
   },
 })

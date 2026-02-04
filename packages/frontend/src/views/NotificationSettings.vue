@@ -93,8 +93,8 @@
                   ></v-switch>
                 </template>
                 <template #item.webhookUrl="{ item }">
-                  <span :title="item.config?.webhookUrl">
-                    {{ item.config?.webhookUrl ? item.config.webhookUrl.substring(0, 40) + '...' : '' }}
+                  <span class="text-medium-emphasis">
+                    {{ item.config?.webhookUrl || '' }}
                   </span>
                 </template>
                 <template #item.actions="{ item }">
@@ -381,7 +381,8 @@
           ></v-text-field>
           <v-text-field
             v-model="channelForm.webhookUrl"
-            label="Webhook URL"
+            :label="editingChannel ? 'Webhook URL (leave blank to keep existing)' : 'Webhook URL'"
+            :placeholder="editingChannel ? 'Enter new URL or leave blank' : ''"
             class="mb-2"
           ></v-text-field>
           <v-btn
@@ -590,7 +591,8 @@ function openChannelDialog(channel) {
     editingChannel.value = channel;
     channelForm.value = {
       name: channel.name,
-      webhookUrl: channel.config?.webhookUrl || '',
+      // Webhook URL is masked in API response — leave blank so user re-enters or keeps existing
+      webhookUrl: '',
     };
   } else {
     editingChannel.value = null;
