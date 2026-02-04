@@ -20,6 +20,7 @@ export interface HistoryRecord {
   notification: Notification;
   channelIds: string[];
   timestamp: string;
+  isTest?: boolean;
 }
 
 function generateId(): string {
@@ -201,7 +202,10 @@ export class NotificationEngine {
     }
 
     // Phase 4: Auto-resolve incidents whose conditions no longer fire
-    const resolved = this.store.autoResolveIncidents(firedKeys);
+    // Only auto-resolve for rules that were actually evaluated (enabled) —
+    // disabled rules don't fire, so their incidents would be wrongly resolved.
+    const enabledRuleIds = new Set(rules.map((r) => r.id));
+    const resolved = this.store.autoResolveIncidents(firedKeys, enabledRuleIds);
     if (resolved > 0) {
       console.log(`Auto-resolved ${resolved} incident(s)`);
     }
@@ -212,13 +216,17 @@ export class NotificationEngine {
     return records;
   }
 
+  get currentPreviousState(): PreviousState {
+    return this.previousState;
+  }
+
   private updatePreviousState(allocations: Allocation[]): void {
     this.previousState = {
       allocations: [...allocations],
     };
   }
 
-  private instantiateRule(config: RuleConfig): Rule | null {
+  instantiateRule(config: RuleConfig): Rule | null {
     switch (config.type) {
       case 'allocation_duration':
         return new AllocationDurationRule(config);
@@ -238,7 +246,7 @@ export class NotificationEngine {
     }
   }
 
-  private instantiateChannel(config: ChannelConfig): Channel | null {
+  instantiateChannel(config: ChannelConfig): Channel | null {
     switch (config.type) {
       case 'discord':
         try {

@@ -158,6 +158,14 @@ export class SqliteStore {
       // Column already exists — ignore
     }
 
+    // Migration: add is_test column to history
+    try {
+      this.db.exec('ALTER TABLE history ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0');
+      console.log('Migration: added is_test column to history');
+    } catch {
+      // Column already exists — ignore
+    }
+
     // Seed default settings if not present
     const seedSetting = this.db.prepare(
       'INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)',
@@ -317,7 +325,7 @@ export class SqliteStore {
     ).all() as Array<{
       id: string; incident_id: string | null; rule_id: string; title: string;
       message: string; severity: string; notification_timestamp: string;
-      channel_ids: string; metadata: string; created_at: string;
+      channel_ids: string; metadata: string; created_at: string; is_test: number;
     }>;
     return rows.map((h) => ({
       id: h.id,
@@ -332,13 +340,14 @@ export class SqliteStore {
       },
       channelIds: JSON.parse(h.channel_ids),
       timestamp: h.created_at,
+      isTest: h.is_test === 1,
     }));
   }
 
   async addHistory(record: HistoryRecord): Promise<void> {
     this.db.prepare(
-      `INSERT INTO history (id, incident_id, rule_id, title, message, severity, notification_timestamp, channel_ids, metadata, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO history (id, incident_id, rule_id, title, message, severity, notification_timestamp, channel_ids, metadata, created_at, is_test)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       record.id,
       (record as any).incidentId || null,
@@ -350,6 +359,7 @@ export class SqliteStore {
       JSON.stringify(record.channelIds || []),
       JSON.stringify(record.notification?.metadata || {}),
       record.timestamp,
+      record.isTest ? 1 : 0,
     );
   }
 
@@ -481,8 +491,10 @@ export class SqliteStore {
   /**
    * Auto-resolve open incidents whose rule_id:target_key was NOT fired this cycle.
    * Only resolves incidents with auto_resolve=1.
+   * If enabledRuleIds is provided, only considers incidents for those rules —
+   * incidents from disabled rules are left untouched.
    */
-  autoResolveIncidents(firedKeys: Set<string>): number {
+  autoResolveIncidents(firedKeys: Set<string>, enabledRuleIds?: Set<string>): number {
     const openIncidents = this.db.prepare(
       "SELECT id, rule_id, target_key FROM incidents WHERE status IN ('open', 'acknowledged') AND auto_resolve = 1",
     ).all() as Array<{ id: string; rule_id: string; target_key: string }>;
@@ -495,6 +507,9 @@ export class SqliteStore {
     );
 
     for (const inc of openIncidents) {
+      // Skip incidents for rules that weren't evaluated (disabled)
+      if (enabledRuleIds && !enabledRuleIds.has(inc.rule_id)) continue;
+
       const key = `${inc.rule_id}:${inc.target_key}`;
       if (!firedKeys.has(key)) {
         update.run(now, inc.id);

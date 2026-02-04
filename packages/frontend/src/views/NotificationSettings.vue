@@ -55,6 +55,17 @@
                   ></v-switch>
                 </template>
                 <template #item.actions="{ item }">
+                  <v-btn
+                    icon
+                    size="small"
+                    variant="text"
+                    color="success"
+                    :loading="testingRuleId === item.id"
+                    @click="testRule(item)"
+                  >
+                    <v-icon>mdi-play-circle-outline</v-icon>
+                    <v-tooltip activator="parent" location="top">Test rule now</v-tooltip>
+                  </v-btn>
                   <v-btn icon size="small" variant="text" @click="openRuleDialog(item)">
                     <v-icon>mdi-pencil</v-icon>
                   </v-btn>
@@ -264,10 +275,11 @@
                   </v-chip>
                 </template>
                 <template #item.incidentId="{ item }">
+                  <v-chip v-if="item.isTest" color="purple" size="x-small" label class="mr-1">TEST</v-chip>
                   <span v-if="item.incidentId" class="text-caption" :title="item.incidentId">
                     {{ item.incidentId.substring(0, 12) }}...
                   </span>
-                  <span v-else class="text-caption text-grey">-</span>
+                  <span v-else-if="!item.isTest" class="text-caption text-grey">-</span>
                 </template>
                 <template #expanded-row="{ columns, item }">
                   <tr>
@@ -527,6 +539,11 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- ========== SNACKBAR ========== -->
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="4000" location="bottom right">
+      {{ snackbar.text }}
+    </v-snackbar>
   </div>
 </template>
 
@@ -612,6 +629,34 @@ async function acknowledgeIncident(item) {
 async function resolveIncident(item) {
   await store.resolveIncident(item.id);
   loadIncidents();
+}
+
+// --- Test Rule ---
+const testingRuleId = ref(null);
+const snackbar = ref({ show: false, text: '', color: 'info' });
+
+function showSnackbar(text, color = 'info') {
+  snackbar.value = { show: true, text, color };
+}
+
+async function testRule(item) {
+  testingRuleId.value = item.id;
+  try {
+    const result = await store.testRule(item.id);
+    if (result.triggered) {
+      showSnackbar(
+        `Triggered: ${result.notificationCount} notification(s)${result.sent ? ' sent' : ' (no channels)'}`,
+        'success',
+      );
+      store.fetchHistory();
+    } else {
+      showSnackbar('Rule did not trigger — conditions not met', 'warning');
+    }
+  } catch (err) {
+    showSnackbar(err.message || 'Test failed', 'error');
+  } finally {
+    testingRuleId.value = null;
+  }
 }
 
 // --- Settings ---
