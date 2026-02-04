@@ -28,5 +28,4 @@ CLAUDE.md
 AGENTS.md
 .claude/
 
-# pnpm
-pnpm-lock.yaml
+# pnpm — lock file should be committed for reproducible builds
