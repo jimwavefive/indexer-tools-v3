@@ -192,6 +192,7 @@ export class NetworkPoller {
         fatalError {
           message
           handler
+          deterministic
         }
         chains {
           network

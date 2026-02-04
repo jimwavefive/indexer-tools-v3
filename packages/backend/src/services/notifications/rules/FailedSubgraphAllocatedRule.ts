@@ -32,6 +32,7 @@ export class FailedSubgraphAllocatedRule implements Rule {
       displayName: string;
       allocatedGRT: BigNumber;
       errorMessage?: string;
+      closeable: boolean;
     }>();
 
     for (const allocation of context.allocations) {
@@ -52,11 +53,15 @@ export class FailedSubgraphAllocatedRule implements Rule {
           allocation.subgraphDeployment.originalName ||
           deploymentHash.slice(0, 12) + '...';
 
+        // Closeable = synced AND (no fatal error OR deterministic fatal error)
+        const closeable = status.synced && (!status.fatalError || status.fatalError.deterministic === true);
+
         deploymentMap.set(deploymentHash, {
           deploymentHash,
           displayName,
           allocatedGRT,
           errorMessage: status.fatalError?.message,
+          closeable,
         });
       }
     }
@@ -78,11 +83,13 @@ export class FailedSubgraphAllocatedRule implements Rule {
     const nameW = Math.max(4, ...shown.map((e) => e.displayName.length));
     const grtW = Math.max(3, ...shown.map((e) => e.allocatedGRT.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',').length));
 
-    const hdr = `${'Name'.padEnd(nameW)}  ${'GRT'.padStart(grtW)}`;
+    const closeW = 9; // "Closeable" header
+    const hdr = `${'Name'.padEnd(nameW)}  ${'GRT'.padStart(grtW)}  ${'Closeable'.padStart(closeW)}`;
     const sep = '─'.repeat(hdr.length);
     const rows = shown.map((entry) => {
       const grt = entry.allocatedGRT.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-      return `${entry.displayName.padEnd(nameW)}  ${grt.padStart(grtW)}`;
+      const close = entry.closeable ? 'YES' : 'NO';
+      return `${entry.displayName.padEnd(nameW)}  ${grt.padStart(grtW)}  ${close.padStart(closeW)}`;
     });
 
     let message = '```\n' + hdr + '\n' + sep + '\n' + rows.join('\n') + '\n```';
@@ -95,6 +102,7 @@ export class FailedSubgraphAllocatedRule implements Rule {
       deploymentHash: d.deploymentHash,
       allocatedGRT: d.allocatedGRT.toFixed(0),
       errorMessage: d.errorMessage,
+      closeable: d.closeable,
     }));
 
     const notification: Notification = {

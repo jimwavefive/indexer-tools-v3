@@ -209,6 +209,7 @@
                               <th>Name</th>
                               <th>Deployment</th>
                               <th class="text-right">GRT</th>
+                              <th v-if="hasCloseable(item.latest_metadata.subgraphs)" class="text-center">Closeable</th>
                               <th v-if="hasBlocksBehind(item.latest_metadata.subgraphs)" class="text-right">Blocks Behind</th>
                               <th v-if="hasErrorMessage(item.latest_metadata.subgraphs)">Error</th>
                             </tr>
@@ -218,6 +219,9 @@
                               <td>{{ sg.name }}</td>
                               <td style="font-family: monospace; font-size: 0.75rem">{{ sg.deploymentHash }}</td>
                               <td class="text-right">{{ Number(sg.allocatedGRT).toLocaleString() }}</td>
+                              <td v-if="hasCloseable(item.latest_metadata.subgraphs)" class="text-center">
+                                <v-chip :color="sg.closeable ? 'success' : 'grey'" size="x-small" label>{{ sg.closeable ? 'YES' : 'NO' }}</v-chip>
+                              </td>
                               <td v-if="hasBlocksBehind(item.latest_metadata.subgraphs)" class="text-right">{{ sg.blocksBehind ? Number(sg.blocksBehind).toLocaleString() : '-' }}</td>
                               <td v-if="hasErrorMessage(item.latest_metadata.subgraphs)" class="text-caption" style="max-width: 400px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis" :title="sg.errorMessage">{{ sg.errorMessage || '-' }}</td>
                             </tr>
@@ -296,6 +300,7 @@
                               <th>Name</th>
                               <th>Deployment</th>
                               <th class="text-right">GRT</th>
+                              <th v-if="hasCloseable(item.notification.metadata.subgraphs)" class="text-center">Closeable</th>
                               <th v-if="hasBlocksBehind(item.notification.metadata.subgraphs)" class="text-right">Blocks Behind</th>
                               <th v-if="hasErrorMessage(item.notification.metadata.subgraphs)">Error</th>
                             </tr>
@@ -305,6 +310,9 @@
                               <td>{{ sg.name }}</td>
                               <td style="font-family: monospace; font-size: 0.75rem">{{ sg.deploymentHash }}</td>
                               <td class="text-right">{{ Number(sg.allocatedGRT).toLocaleString() }}</td>
+                              <td v-if="hasCloseable(item.notification.metadata.subgraphs)" class="text-center">
+                                <v-chip :color="sg.closeable ? 'success' : 'grey'" size="x-small" label>{{ sg.closeable ? 'YES' : 'NO' }}</v-chip>
+                              </td>
                               <td v-if="hasBlocksBehind(item.notification.metadata.subgraphs)" class="text-right">{{ sg.blocksBehind ? Number(sg.blocksBehind).toLocaleString() : '-' }}</td>
                               <td v-if="hasErrorMessage(item.notification.metadata.subgraphs)" class="text-caption" style="max-width: 400px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis" :title="sg.errorMessage">{{ sg.errorMessage || '-' }}</td>
                             </tr>
@@ -876,6 +884,10 @@ function shouldShowMetadataKey(key) {
 
 function isSubgraphsArray(key, value) {
   return key === 'subgraphs' && Array.isArray(value);
+}
+
+function hasCloseable(subgraphs) {
+  return subgraphs.some((sg) => sg.closeable !== undefined);
 }
 
 function hasBlocksBehind(subgraphs) {
