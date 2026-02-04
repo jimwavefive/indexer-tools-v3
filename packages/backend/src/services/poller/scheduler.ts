@@ -1,7 +1,9 @@
 import { NetworkPoller } from './NetworkPoller.js';
-import { NotificationEngine } from '../notifications/NotificationEngine.js';
+import { NotificationEngine, type HistoryRecord } from '../notifications/NotificationEngine.js';
 import { SqliteStore } from '../../db/sqliteStore.js';
-import type { DeploymentStatus } from '../notifications/rules/Rule.js';
+import type { Allocation } from '@indexer-tools/shared';
+import type { NetworkDataSnapshot, DeploymentStatus } from '../notifications/rules/Rule.js';
+import type { Channel } from '../notifications/channels/Channel.js';
 
 const DEFAULT_POLLING_INTERVAL_SECONDS = 600; // 10 minutes
 
@@ -15,6 +17,9 @@ export class PollingScheduler {
   private intervalMs: number;
   private timer: ReturnType<typeof setInterval> | null = null;
   private polling = false;
+  private latestAllocations: Allocation[] | null = null;
+  private latestNetworkData: NetworkDataSnapshot | null = null;
+  private latestDeploymentStatuses: Map<string, DeploymentStatus> | undefined;
 
   constructor(options: {
     store: SqliteStore;
@@ -115,6 +120,11 @@ export class PollingScheduler {
         }
       }
 
+      // Cache latest data for testRule()
+      this.latestAllocations = allocations;
+      this.latestNetworkData = networkData;
+      this.latestDeploymentStatuses = deploymentStatuses;
+
       const rules = await this.store.getRules();
       const channels = await this.store.getChannels();
 
@@ -133,6 +143,86 @@ export class PollingScheduler {
     } finally {
       this.polling = false;
     }
+  }
+
+  async testRule(ruleId: string): Promise<{
+    triggered: boolean;
+    notificationCount: number;
+    sent: boolean;
+    filterSummary?: string;
+    error?: string;
+    status?: number;
+  }> {
+    if (!this.latestAllocations || !this.latestNetworkData) {
+      return { triggered: false, notificationCount: 0, sent: false, error: 'No poll data yet — wait for the first poll to complete', status: 503 };
+    }
+
+    const rules = await this.store.getRules();
+    const ruleConfig = rules.find((r) => r.id === ruleId);
+    if (!ruleConfig) {
+      return { triggered: false, notificationCount: 0, sent: false, error: 'Rule not found', status: 404 };
+    }
+
+    const rule = this.engine.instantiateRule(ruleConfig);
+    if (!rule) {
+      return { triggered: false, notificationCount: 0, sent: false, error: `Unknown rule type: ${ruleConfig.type}`, status: 400 };
+    }
+
+    const context = {
+      allocations: this.latestAllocations,
+      networkData: this.latestNetworkData,
+      previousState: this.engine.currentPreviousState,
+      deploymentStatuses: this.latestDeploymentStatuses,
+    };
+
+    const result = rule.evaluate(context);
+
+    if (!result.triggered || result.notifications.length === 0) {
+      return { triggered: false, notificationCount: 0, sent: false, filterSummary: result.filterSummary };
+    }
+
+    // Send via enabled channels
+    const channelConfigs = await this.store.getChannels();
+    const channels: Channel[] = channelConfigs
+      .filter((c) => c.enabled)
+      .map((c) => this.engine.instantiateChannel(c))
+      .filter((c): c is Channel => c !== null);
+
+    let sent = false;
+    if (channels.length > 0) {
+      const summaries = result.filterSummary ? new Map([[rule.id, result.filterSummary]]) : undefined;
+      for (const channel of channels) {
+        try {
+          await channel.sendBatch(result.notifications, summaries);
+          sent = true;
+        } catch (err) {
+          console.error(`[testRule] Failed to send via channel "${channel.name}":`, err);
+        }
+      }
+    }
+
+    // Create history records tagged as test
+    const nowIso = new Date().toISOString();
+    const sentChannelIds = channels.map((c) => c.id);
+    const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+    for (const notification of result.notifications) {
+      const record: HistoryRecord = {
+        id: generateId(),
+        notification,
+        channelIds: sent ? sentChannelIds : [],
+        timestamp: nowIso,
+        isTest: true,
+      };
+      await this.store.addHistory(record);
+    }
+
+    return {
+      triggered: true,
+      notificationCount: result.notifications.length,
+      sent,
+      filterSummary: result.filterSummary,
+    };
   }
 
   private async resolveStatusEndpoint(): Promise<string | undefined> {

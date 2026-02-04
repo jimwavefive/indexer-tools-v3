@@ -115,6 +115,29 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
     }
   });
 
+  // --- Rule Test ---
+
+  router.post('/api/notifications/rules/:id/test', async (req: Request, res: Response) => {
+    try {
+      if (!scheduler) {
+        res.status(503).json({ error: 'Polling scheduler not available' });
+        return;
+      }
+
+      const result = await scheduler.testRule(req.params.id);
+
+      if (result.error) {
+        res.status(result.status || 500).json({ error: result.error });
+        return;
+      }
+
+      res.json(result);
+    } catch (err) {
+      console.error('Failed to test rule:', err);
+      res.status(500).json({ error: 'Failed to test rule' });
+    }
+  });
+
   // --- Channels ---
 
   router.get('/api/notifications/channels', async (_req: Request, res: Response) => {

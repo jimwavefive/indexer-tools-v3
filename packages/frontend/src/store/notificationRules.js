@@ -83,6 +83,20 @@ export const useNotificationRulesStore = defineStore('notificationRules', {
       }
     },
 
+    async testRule(id) {
+      try {
+        const res = await fetch(`${BASE_URL}/api/notifications/rules/${id}/test`, {
+          method: 'POST',
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Test failed: ${res.statusText}`);
+        return data;
+      } catch (err) {
+        console.error('[notificationRules] testRule error:', err);
+        throw err;
+      }
+    },
+
     // --- Channels ---
     async fetchChannels() {
       this.loading = true;
