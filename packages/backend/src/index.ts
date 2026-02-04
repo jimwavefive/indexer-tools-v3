@@ -3,7 +3,7 @@ import cors from 'cors';
 import healthRoutes from './api/routes/health.js';
 import { createNotificationRoutes } from './api/routes/notifications.js';
 import agentRouter from './api/routes/agent.js';
-import { JsonStore } from './db/jsonStore.js';
+import { SqliteStore } from './db/sqliteStore.js';
 import { PollingScheduler } from './services/poller/scheduler.js';
 import type { ChannelConfig } from './services/notifications/channels/Channel.js';
 
@@ -52,7 +52,7 @@ function parseChannelsFromEnv(): ChannelConfig[] {
  * for env-channel-* entries — they are created or updated to match.
  * Channels created via the API (non env-channel-* IDs) are left untouched.
  */
-async function syncEnvChannels(store: JsonStore): Promise<void> {
+async function syncEnvChannels(store: SqliteStore): Promise<void> {
   const envChannels = parseChannelsFromEnv();
   if (envChannels.length === 0) return;
 
@@ -80,17 +80,17 @@ app.use(cors());
 app.use(express.json());
 
 // Shared store instance
-const store = new JsonStore();
+const store = new SqliteStore();
+
+// Migrate from JSON if legacy file exists
+await store.migrateFromJson();
 
 // Sync env-defined notification channels into the store
 await syncEnvChannels(store);
 
-// Routes
-app.use(healthRoutes);
-app.use(createNotificationRoutes(store));
-app.use('/api/agent', agentRouter);
-
 // Start notification polling if enabled
+let scheduler: PollingScheduler | undefined;
+
 if (process.env.FEATURE_NOTIFICATIONS_ENABLED === 'true') {
   const indexerAddress = process.env.INDEXER_ADDRESS;
 
@@ -100,11 +100,11 @@ if (process.env.FEATURE_NOTIFICATIONS_ENABLED === 'true') {
     );
   } else {
     const pollingIntervalSeconds = parseInt(
-      process.env.POLLING_INTERVAL_SECONDS || '300',
+      store.getSetting('pollingIntervalSeconds') || process.env.POLLING_INTERVAL_SECONDS || '600',
       10,
     );
 
-    const scheduler = new PollingScheduler({
+    scheduler = new PollingScheduler({
       store,
       indexerAddress,
       pollingIntervalSeconds,
@@ -115,7 +115,7 @@ if (process.env.FEATURE_NOTIFICATIONS_ENABLED === 'true') {
     // Graceful shutdown
     const shutdown = () => {
       console.log('Shutting down polling scheduler...');
-      scheduler.stop();
+      scheduler!.stop();
       process.exit(0);
     };
 
@@ -123,6 +123,11 @@ if (process.env.FEATURE_NOTIFICATIONS_ENABLED === 'true') {
     process.on('SIGTERM', shutdown);
   }
 }
+
+// Routes
+app.use(healthRoutes);
+app.use(createNotificationRoutes(store, scheduler));
+app.use('/api/agent', agentRouter);
 
 app.listen(port, () => {
   console.log(`Indexer Tools Backend running on port ${port}`);
