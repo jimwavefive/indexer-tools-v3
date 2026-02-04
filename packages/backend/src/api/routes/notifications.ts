@@ -6,6 +6,28 @@ import type { RuleConfig } from '../../services/notifications/rules/Rule.js';
 import type { ChannelConfig } from '../../services/notifications/channels/Channel.js';
 import type { PollingScheduler } from '../../services/poller/scheduler.js';
 
+/** Validate that a webhook URL is safe to fetch (SSRF protection). */
+function isAllowedWebhookUrl(urlStr: string): { ok: boolean; reason?: string } {
+  let parsed: URL;
+  try {
+    parsed = new URL(urlStr);
+  } catch {
+    return { ok: false, reason: 'Invalid URL' };
+  }
+
+  if (parsed.protocol !== 'https:') {
+    return { ok: false, reason: 'Only HTTPS URLs are allowed' };
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  const allowedHosts = ['discord.com', 'discordapp.com'];
+  if (!allowedHosts.some((h) => hostname === h || hostname.endsWith('.' + h))) {
+    return { ok: false, reason: 'Only Discord webhook URLs are allowed' };
+  }
+
+  return { ok: true };
+}
+
 export function createNotificationRoutes(store: SqliteStore, scheduler?: PollingScheduler): Router {
   const router = Router();
 
@@ -98,7 +120,17 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
   router.get('/api/notifications/channels', async (_req: Request, res: Response) => {
     try {
       const channels = await store.getChannels();
-      res.json(channels);
+      // Mask sensitive config values in the response
+      const masked = channels.map((ch) => ({
+        ...ch,
+        config: {
+          ...ch.config,
+          ...(ch.config?.webhookUrl
+            ? { webhookUrl: '••••••••' + (ch.config.webhookUrl as string).slice(-8) }
+            : {}),
+        },
+      }));
+      res.json(masked);
     } catch (err) {
       console.error('Failed to get channels:', err);
       res.status(500).json({ error: 'Failed to get channels' });
@@ -144,14 +176,27 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
         return;
       }
 
+      // If no config provided, preserve existing config (supports masked webhook editing)
+      const updatedConfig = body.config ?? channels[index].config;
       channels[index] = {
         ...channels[index],
         ...body,
         id, // Prevent ID changes
+        config: updatedConfig,
       };
 
       await store.saveChannels(channels);
-      res.json(channels[index]);
+      // Mask sensitive config in response
+      const responseChannel = {
+        ...channels[index],
+        config: {
+          ...channels[index].config,
+          ...(channels[index].config?.webhookUrl
+            ? { webhookUrl: '••••••••' + (channels[index].config.webhookUrl as string).slice(-8) }
+            : {}),
+        },
+      };
+      res.json(responseChannel);
     } catch (err) {
       console.error('Failed to update channel:', err);
       res.status(500).json({ error: 'Failed to update channel' });
@@ -187,6 +232,12 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
         return;
       }
 
+      const urlCheck = isAllowedWebhookUrl(webhookUrl);
+      if (!urlCheck.ok) {
+        res.status(400).json({ error: `Invalid webhook URL: ${urlCheck.reason}` });
+        return;
+      }
+
       const embed = {
         title: 'Indexer Tools — Test Notification',
         description: 'This is a test notification from Indexer Tools.',
@@ -195,11 +246,15 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
         footer: { text: 'Test notification' },
       };
 
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
       const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ embeds: [embed] }),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
 
       if (!response.ok) {
         const text = await response.text().catch(() => 'unknown error');

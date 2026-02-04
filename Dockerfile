@@ -47,6 +47,8 @@ RUN pnpm --filter @indexer-tools/backend build
 FROM node:20-slim AS frontend-prod
 WORKDIR /app
 
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+
 # Copy node_modules from deps (shamefully-hoisted)
 COPY --from=deps /app/node_modules ./node_modules
 
@@ -55,7 +57,12 @@ COPY packages/frontend/server.js packages/frontend/
 COPY packages/frontend/docker-entrypoint.sh packages/frontend/
 RUN chmod +x packages/frontend/docker-entrypoint.sh
 
+# Entrypoint writes config files into dist — ensure writable by appuser
+RUN chown -R appuser:appgroup /app/packages/frontend/dist
+RUN mkdir -p /app/packages/frontend/public && chown appuser:appgroup /app/packages/frontend/public
+
 EXPOSE 3000
+USER appuser
 
 ENTRYPOINT [ "/app/packages/frontend/docker-entrypoint.sh" ]
 CMD ["node", "packages/frontend/server.js"]
@@ -66,6 +73,8 @@ CMD ["node", "packages/frontend/server.js"]
 FROM node:20-slim AS backend-prod
 WORKDIR /app
 
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+
 # Copy node_modules from deps (shamefully-hoisted)
 COPY --from=deps /app/node_modules ./node_modules
 
@@ -73,6 +82,11 @@ COPY --from=build-shared /app/packages/shared/dist packages/shared/dist
 COPY packages/shared/package.json packages/shared/
 COPY --from=build-backend /app/packages/backend/dist packages/backend/dist
 
+# Create data directory owned by appuser (Docker volume mount overrides this,
+# so docker-compose must ensure the volume is writable — see example compose file)
+RUN mkdir -p /app/data && chown -R appuser:appgroup /app/data
+
 EXPOSE 4000
+USER appuser
 
 CMD ["node", "packages/backend/dist/index.js"]
