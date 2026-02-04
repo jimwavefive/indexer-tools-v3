@@ -34,8 +34,10 @@ function deriveTargetKey(ruleId: string, notification: Notification): { key: str
     return { key: `allocation:${meta.allocationId}`, label };
   }
   if (meta.subgraphId) {
-    const label = name && ipfs ? `${name} (${ipfs})` : name || (meta.subgraphId as string);
-    return { key: `subgraph:${meta.subgraphId}`, label };
+    const deployHash = (meta.currentDeploymentHash || meta.deploymentIpfsHash) as string | undefined;
+    const label = name && deployHash ? `${name} (${deployHash})` : name || (meta.subgraphId as string);
+    const keySuffix = deployHash ? `:${deployHash}` : '';
+    return { key: `subgraph:${meta.subgraphId}${keySuffix}`, label };
   }
   return { key: `global:${ruleId}`, label: ruleId };
 }

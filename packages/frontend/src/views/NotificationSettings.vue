@@ -337,7 +337,7 @@
               v-model.number="ruleForm.conditions.maxApr"
               label="Max APR (%)"
               type="number"
-              hint="Only alert when subgraph APR is at or below this value"
+              hint="Only alert when subgraph APR is at or below this value (0 = no APR filter)"
               persistent-hint
             ></v-text-field>
             <v-text-field
@@ -446,7 +446,7 @@ if (!featureFlagStore.isEnabled('notifications')) {
   router.replace('/');
 }
 
-const tab = ref('rules');
+const tab = ref('incidents');
 
 // --- Table Headers ---
 const ruleHeaders = [
@@ -742,6 +742,7 @@ onMounted(async () => {
     store.fetchRules(),
     store.fetchChannels(),
     store.fetchHistory(),
+    store.fetchIncidents(incidentStatusFilter.value),
   ]);
 });
 </script>
