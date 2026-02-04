@@ -56,7 +56,7 @@ const DEFAULT_RULES: RuleConfig[] = [
     name: 'Subgraph Deployment Upgrade',
     type: 'subgraph_upgrade',
     enabled: true,
-    conditions: { maxApr: 0, minGrt: 10000 },
+    conditions: { maxApr: 10, minGrt: 10000 },
   },
 ];
 

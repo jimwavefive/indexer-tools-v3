@@ -66,6 +66,65 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function truncateHash(hash: string): string {
+  if (!hash || hash.length <= 16) return hash;
+  return `${hash.slice(0, 8)}...${hash.slice(-6)}`;
+}
+
+const METADATA_LABELS: Record<string, string> = {
+  allocatedGRT: 'Allocated GRT',
+  apr: 'APR',
+  latestDeploymentHash: 'New Deployment',
+  currentDeploymentHash: 'Old Deployment',
+  currentDeploymentHashes: 'Old Deployments',
+  epochDuration: 'Epoch Duration',
+  thresholdEpochs: 'Threshold',
+  ratio: 'Ratio',
+  threshold: 'Threshold',
+  signalProportion: 'Signal Proportion',
+  stakeProportion: 'Stake Proportion',
+  signalledTokens: 'Signal',
+};
+
+const METADATA_HIDDEN = new Set(['allocationId', 'deploymentIpfsHash', 'subgraphId', 'subgraphName']);
+
+// Preferred display order — keys not listed here appear at the end in original order
+const METADATA_ORDER: string[] = [
+  'currentDeploymentHash', 'currentDeploymentHashes',
+  'latestDeploymentHash',
+  'allocatedGRT', 'apr',
+  'epochDuration', 'thresholdEpochs',
+  'ratio', 'threshold',
+  'signalProportion', 'stakeProportion',
+  'signalledTokens',
+];
+
+function formatMetadataValue(key: string, raw: unknown): string {
+  if (key === 'allocatedGRT' || key === 'allocatedTokens') return formatGRT(String(raw));
+  if (key === 'apr') return `${raw}%`;
+  if (key === 'signalProportion' || key === 'stakeProportion') return `${(Number(raw) * 100).toFixed(4)}%`;
+  if (key === 'epochDuration' || key === 'thresholdEpochs') return `${raw} epochs`;
+  if (key === 'ratio' || key === 'threshold') return Number(raw).toFixed(3);
+  if (key === 'signalledTokens') return formatGRT(String(Math.round(Number(raw) / 1e18)));
+  if (Array.isArray(raw)) return raw.join(', ');
+  return String(raw);
+}
+
+/** Map raw metadata to ordered [label, formattedValue] pairs. */
+function formatMetadataBlock(metadata: Record<string, unknown>): [string, string][] {
+  const keys = Object.keys(metadata).filter((k) => !METADATA_HIDDEN.has(k));
+  keys.sort((a, b) => {
+    const ai = METADATA_ORDER.indexOf(a);
+    const bi = METADATA_ORDER.indexOf(b);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+  });
+
+  return keys.map((key) => [
+    METADATA_LABELS[key] || key,
+    formatMetadataValue(key, metadata[key]),
+  ]);
+}
+
 function formatGRT(value: string): string {
   const num = parseInt(value, 10);
   if (isNaN(num)) return value;
@@ -115,23 +174,30 @@ export class DiscordChannel implements Channel {
 
   private buildSingleEmbed(notification: Notification): Record<string, unknown> {
     const color = SEVERITY_COLORS[notification.severity] ?? SEVERITY_COLORS.info;
+
+    let description = notification.message;
+
+    if (notification.metadata) {
+      const meta = notification.metadata;
+      const oldHash = meta.currentDeploymentHash || meta.deploymentIpfsHash;
+      const newHash = meta.latestDeploymentHash;
+
+      if (oldHash) {
+        description += `\n**Old Deployment**\n\`${oldHash}\``;
+      }
+      if (newHash) {
+        description += `\n**New Deployment**\n\`${newHash}\``;
+      }
+    }
+
     return {
       title: notification.title,
-      description: notification.message,
+      description,
       color,
       timestamp: notification.timestamp,
       footer: {
         text: `Rule: ${notification.ruleId} | Severity: ${notification.severity}`,
       },
-      fields: notification.metadata
-        ? Object.entries(notification.metadata)
-            .filter(([k]) => k !== 'allocationId' && k !== 'deploymentIpfsHash')
-            .map(([name, value]) => ({
-              name,
-              value: String(value),
-              inline: true,
-            }))
-        : [],
     };
   }
 

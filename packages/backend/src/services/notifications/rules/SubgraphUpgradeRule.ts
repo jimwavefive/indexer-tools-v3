@@ -21,7 +21,7 @@ export class SubgraphUpgradeRule implements Rule {
   }
 
   evaluate(context: RuleContext): RuleResult {
-    const maxApr = (this.conditions.maxApr as number) ?? 0;
+    const maxApr = (this.conditions.maxApr as number) ?? 10;
     const minGrt = (this.conditions.minGrt as number) ?? 10000;
     const notifications: Notification[] = [];
     let totalUpgrades = 0;
@@ -45,70 +45,83 @@ export class SubgraphUpgradeRule implements Rule {
       entry.allocations.push(allocation);
     }
 
-    // For each subgraph, check if any allocation is on the latest deployment
+    const issuancePerYear = new BigNumber(context.networkData.networkGRTIssuancePerBlock).multipliedBy(BLOCKS_PER_YEAR);
+
+    // For each subgraph, check each old deployment independently
     for (const [subgraphId, { subgraph, allocations }] of subgraphAllocations) {
       const latestDeploymentHash = subgraph.currentVersion?.subgraphDeployment?.ipfsHash;
       if (!latestDeploymentHash) continue;
 
-      const hasLatest = allocations.some(
-        (a) => a.subgraphDeployment.ipfsHash === latestDeploymentHash,
-      );
-
-      if (hasLatest) continue;
-
-      // None of the indexer's allocations are on the latest deployment
       const displayName =
         subgraph.metadata?.displayName ||
         allocations[0].subgraphDeployment.originalName ||
         subgraphId;
 
-      const currentHashes = [...new Set(allocations.map((a) => a.subgraphDeployment.ipfsHash))];
-
-      // Sum allocated GRT across all allocations for this subgraph
-      const totalAllocatedWei = allocations.reduce(
-        (sum, a) => sum.plus(a.allocatedTokens),
-        new BigNumber(0),
-      );
-      const totalAllocatedGRT = totalAllocatedWei.dividedBy(WEI_PER_ETHER);
-
-      // Calculate current APR: signal/totalSignal * issuancePerYear / stakedTokens * 100
-      const deployment = allocations[0].subgraphDeployment;
-      const issuancePerYear = new BigNumber(context.networkData.networkGRTIssuancePerBlock).multipliedBy(BLOCKS_PER_YEAR);
-      let aprPct = new BigNumber(0);
-      if (new BigNumber(deployment.stakedTokens).isGreaterThan(0) && new BigNumber(context.networkData.totalTokensSignalled).isGreaterThan(0)) {
-        aprPct = new BigNumber(deployment.signalledTokens)
-          .dividedBy(context.networkData.totalTokensSignalled)
-          .multipliedBy(issuancePerYear)
-          .dividedBy(deployment.stakedTokens)
-          .multipliedBy(100);
+      // Group allocations by deployment hash within this subgraph
+      const byDeployment = new Map<string, Allocation[]>();
+      for (const a of allocations) {
+        const hash = a.subgraphDeployment.ipfsHash;
+        if (hash === latestDeploymentHash) continue; // skip allocations already on latest
+        let list = byDeployment.get(hash);
+        if (!list) {
+          list = [];
+          byDeployment.set(hash, list);
+        }
+        list.push(a);
       }
 
-      totalUpgrades++;
+      if (byDeployment.size === 0) continue; // all allocations are on latest
 
-      // Filter: only alert when APR is low enough and GRT is high enough to matter
-      if (aprPct.isGreaterThan(maxApr) || totalAllocatedGRT.isLessThan(minGrt)) continue;
+      // Evaluate each old deployment independently
+      for (const [deploymentHash, depAllocations] of byDeployment) {
+        const deployment = depAllocations[0].subgraphDeployment;
 
-      notifications.push({
-        title: `Subgraph deployment upgraded`,
-        message: `**${displayName}** has a new deployment (${latestDeploymentHash.slice(0, 12)}...) but your ${allocations.length} allocation(s) are on older version(s) with **${totalAllocatedGRT.toFixed(0)} GRT** allocated at **${aprPct.toFixed(1)}% APR**. You may need to re-allocate.`,
-        severity: 'info',
-        timestamp: new Date().toISOString(),
-        ruleId: this.id,
-        metadata: {
-          subgraphId,
-          subgraphName: displayName,
-          latestDeploymentHash,
-          currentDeploymentHashes: currentHashes,
-          allocatedGRT: totalAllocatedGRT.toFixed(0),
-          apr: aprPct.toFixed(1),
-        },
-      });
+        const allocatedWei = depAllocations.reduce(
+          (sum, a) => sum.plus(a.allocatedTokens),
+          new BigNumber(0),
+        );
+        const allocatedGRT = allocatedWei.dividedBy(WEI_PER_ETHER);
+
+        // Calculate APR for this specific deployment
+        let aprPct = new BigNumber(0);
+        if (new BigNumber(deployment.stakedTokens).isGreaterThan(0) && new BigNumber(context.networkData.totalTokensSignalled).isGreaterThan(0)) {
+          aprPct = new BigNumber(deployment.signalledTokens)
+            .dividedBy(context.networkData.totalTokensSignalled)
+            .multipliedBy(issuancePerYear)
+            .dividedBy(deployment.stakedTokens)
+            .multipliedBy(100);
+        }
+
+        totalUpgrades++;
+
+        // Filter: only alert when GRT is high enough to matter
+        if (allocatedGRT.isLessThan(minGrt)) continue;
+        // Filter: only alert when APR is low enough (0 = disabled, alert regardless of APR)
+        if (maxApr > 0 && aprPct.isGreaterThan(maxApr)) continue;
+
+        notifications.push({
+          title: `Subgraph deployment upgraded`,
+          message: `**${displayName}** has a new deployment (${latestDeploymentHash.slice(0, 12)}...) but your ${depAllocations.length} allocation(s) on ${deploymentHash.slice(0, 12)}... have **${allocatedGRT.toFixed(0)} GRT** at **${aprPct.toFixed(1)}% APR**. You may need to re-allocate.`,
+          severity: 'info',
+          timestamp: new Date().toISOString(),
+          ruleId: this.id,
+          metadata: {
+            subgraphId,
+            subgraphName: displayName,
+            latestDeploymentHash,
+            currentDeploymentHash: deploymentHash,
+            allocatedGRT: allocatedGRT.toFixed(0),
+            apr: aprPct.toFixed(1),
+          },
+        });
+      }
     }
 
     const filteredCount = totalUpgrades - notifications.length;
+    const aprDesc = maxApr > 0 ? `APR <= ${maxApr}%` : 'any APR';
     const filterSummary =
       notifications.length === 0 && filteredCount > 0
-        ? `${filteredCount} upgrade(s) found but none match filters (APR <= ${maxApr}% and GRT >= ${minGrt.toLocaleString('en-US')})`
+        ? `${filteredCount} upgrade(s) found but none match filters (${aprDesc} and GRT >= ${minGrt.toLocaleString('en-US')})`
         : undefined;
 
     return {
