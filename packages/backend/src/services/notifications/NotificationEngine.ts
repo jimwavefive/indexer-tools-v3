@@ -104,10 +104,10 @@ export class NotificationEngine {
         firedKeys.add(incidentKey);
 
         const sentChannelIds = channels.map((c) => c.id);
-        const existing = this.store.getOpenIncident(rule.id, targetKey);
+        const existing = this.store.getActiveIncident(rule.id, targetKey);
 
         if (existing) {
-          // Update existing incident
+          // Update existing incident metadata
           this.store.updateIncident(existing.id, {
             last_seen: nowIso,
             occurrence_count: existing.occurrence_count + 1,
@@ -118,9 +118,14 @@ export class NotificationEngine {
             channel_ids: sentChannelIds,
           });
 
-          // Check cooldown: send again only if enough time has passed since last history record
-          const lastSeen = new Date(existing.last_seen).getTime();
-          if (now.getTime() - lastSeen >= cooldownMs) {
+          // Skip re-notification for acknowledged incidents
+          if (existing.status === 'acknowledged') {
+            continue;
+          }
+
+          // Check cooldown: send again only if enough time has passed since last notification
+          const lastNotified = new Date(existing.last_notified_at || existing.first_seen).getTime();
+          if (now.getTime() - lastNotified >= cooldownMs) {
             toSend.push({ notification, incidentId: existing.id });
           }
         } else {
@@ -136,6 +141,7 @@ export class NotificationEngine {
             auto_resolve: 1,
             first_seen: nowIso,
             last_seen: nowIso,
+            last_notified_at: nowIso,
             resolved_at: null,
             occurrence_count: 1,
             latest_title: notification.title,
@@ -165,7 +171,7 @@ export class NotificationEngine {
       }
     }
 
-    // Phase 3: Create history records
+    // Phase 3: Create history records and update last_notified_at
     const records: HistoryRecord[] = [];
     const sentChannelIds = channels.map((c) => c.id);
 
@@ -179,6 +185,9 @@ export class NotificationEngine {
       };
 
       records.push(record);
+
+      // Mark when this incident was last notified
+      this.store.updateIncident(incidentId, { last_notified_at: nowIso });
 
       if (this.onHistoryRecord) {
         this.onHistoryRecord(record);

@@ -38,6 +38,7 @@ export class AllocationDurationRule implements Rule {
             allocationId: allocation.id,
             subgraphName: displayName,
             deploymentIpfsHash: allocation.subgraphDeployment.ipfsHash,
+            allocatedGRT: weiToGrt(allocation.allocatedTokens),
             epochDuration,
             thresholdEpochs,
           },
@@ -50,6 +51,10 @@ export class AllocationDurationRule implements Rule {
       notifications,
     };
   }
+}
+
+function weiToGrt(wei: string): string {
+  return (Number(wei) / 1e18).toFixed(0);
 }
 
 function getAllocationDisplayName(allocation: Allocation): string {

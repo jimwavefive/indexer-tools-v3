@@ -50,6 +50,7 @@ export class ProportionRule implements Rule {
             allocationId: allocation.id,
             subgraphName: displayName,
             deploymentIpfsHash: allocation.subgraphDeployment.ipfsHash,
+            allocatedGRT: weiToGrt(allocation.allocatedTokens),
             ratio: ratio.toFixed(4),
             threshold,
             signalProportion: signalProportion.toFixed(6),
@@ -64,6 +65,10 @@ export class ProportionRule implements Rule {
       notifications,
     };
   }
+}
+
+function weiToGrt(wei: string): string {
+  return (Number(wei) / 1e18).toFixed(0);
 }
 
 function getAllocationDisplayName(allocation: Allocation): string {
