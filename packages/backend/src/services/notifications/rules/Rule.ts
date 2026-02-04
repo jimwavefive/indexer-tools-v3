@@ -5,7 +5,7 @@ export interface DeploymentStatus {
   subgraph: string; // deployment IPFS hash
   health: 'healthy' | 'unhealthy' | 'failed';
   synced: boolean;
-  fatalError?: { message: string; handler: string | null };
+  fatalError?: { message: string; handler: string | null; deterministic: boolean };
   chains: Array<{
     network: string;
     chainHeadBlock: { number: string };
