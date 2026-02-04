@@ -20,6 +20,7 @@ export interface IncidentRecord {
   auto_resolve: number;
   first_seen: string;
   last_seen: string;
+  last_notified_at: string | null;
   resolved_at: string | null;
   occurrence_count: number;
   latest_title: string;
@@ -134,6 +135,14 @@ export class SqliteStore {
       CREATE INDEX IF NOT EXISTS idx_history_incident ON history(incident_id);
       CREATE INDEX IF NOT EXISTS idx_history_created ON history(created_at);
     `);
+
+    // Migration: add last_notified_at column to incidents
+    try {
+      this.db.exec('ALTER TABLE incidents ADD COLUMN last_notified_at TEXT');
+      console.log('Migration: added last_notified_at column to incidents');
+    } catch {
+      // Column already exists — ignore
+    }
 
     // Seed default settings if not present
     const seedSetting = this.db.prepare(
@@ -328,9 +337,9 @@ export class SqliteStore {
 
   // --- Incidents ---
 
-  getOpenIncident(ruleId: string, targetKey: string): IncidentRecord | null {
+  getActiveIncident(ruleId: string, targetKey: string): IncidentRecord | null {
     const row = this.db.prepare(
-      "SELECT * FROM incidents WHERE rule_id = ? AND target_key = ? AND status = 'open'",
+      "SELECT * FROM incidents WHERE rule_id = ? AND target_key = ? AND status IN ('open', 'acknowledged')",
     ).get(ruleId, targetKey) as any;
     if (!row) return null;
     return {
@@ -344,8 +353,8 @@ export class SqliteStore {
   createIncident(incident: IncidentRecord): void {
     this.db.prepare(
       `INSERT INTO incidents (id, rule_id, target_key, target_label, severity, status, auto_resolve,
-        first_seen, last_seen, resolved_at, occurrence_count, latest_title, latest_message, latest_metadata, channel_ids)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        first_seen, last_seen, last_notified_at, resolved_at, occurrence_count, latest_title, latest_message, latest_metadata, channel_ids)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       incident.id,
       incident.rule_id,
@@ -356,6 +365,7 @@ export class SqliteStore {
       incident.auto_resolve,
       incident.first_seen,
       incident.last_seen,
+      incident.last_notified_at || incident.first_seen,
       incident.resolved_at,
       incident.occurrence_count,
       incident.latest_title,
@@ -370,6 +380,7 @@ export class SqliteStore {
     const values: unknown[] = [];
 
     if (updates.last_seen !== undefined) { fields.push('last_seen = ?'); values.push(updates.last_seen); }
+    if (updates.last_notified_at !== undefined) { fields.push('last_notified_at = ?'); values.push(updates.last_notified_at); }
     if (updates.occurrence_count !== undefined) { fields.push('occurrence_count = ?'); values.push(updates.occurrence_count); }
     if (updates.latest_title !== undefined) { fields.push('latest_title = ?'); values.push(updates.latest_title); }
     if (updates.latest_message !== undefined) { fields.push('latest_message = ?'); values.push(updates.latest_message); }
@@ -451,7 +462,7 @@ export class SqliteStore {
    */
   autoResolveIncidents(firedKeys: Set<string>): number {
     const openIncidents = this.db.prepare(
-      "SELECT id, rule_id, target_key FROM incidents WHERE status = 'open' AND auto_resolve = 1",
+      "SELECT id, rule_id, target_key FROM incidents WHERE status IN ('open', 'acknowledged') AND auto_resolve = 1",
     ).all() as Array<{ id: string; rule_id: string; target_key: string }>;
 
     const now = new Date().toISOString();
