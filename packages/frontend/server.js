@@ -16,9 +16,10 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('X-XSS-Protection', '0');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  // CSP: connect-src allows all HTTPS because the app connects to user-configured
+  // CSP: connect-src allows http: and https: because the app connects to user-configured
   // endpoints (RPC providers, Graph gateways, indexer status endpoints) on arbitrary domains.
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; connect-src 'self' https:; font-src 'self' data: https://fonts.gstatic.com");
+  // img-src allows https: for subgraph images from external CDNs.
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; connect-src 'self' http: https:; font-src 'self' data: https://fonts.gstatic.com");
   next();
 });
 
