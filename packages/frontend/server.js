@@ -5,7 +5,7 @@ const path = require('path');
 const http = require('http');
 const url = require('url');
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://backend:4000';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://indexer-tools-backend:4000';
 const MIDDLEWARE_API_KEY = process.env.MIDDLEWARE_API_KEY;
 
 let app = express();
