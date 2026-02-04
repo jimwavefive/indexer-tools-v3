@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import healthRoutes from './api/routes/health.js';
 import { createNotificationRoutes } from './api/routes/notifications.js';
 import agentRouter from './api/routes/agent.js';
@@ -76,8 +77,27 @@ async function syncEnvChannels(store: SqliteStore): Promise<void> {
 const app = express();
 const port = parseInt(process.env.PORT || '4000', 10);
 
-app.use(cors());
-app.use(express.json());
+app.use(cors({ origin: process.env.MIDDLEWARE_CORS_ORIGIN || '*' }));
+app.use(express.json({ limit: '100kb' }));
+
+// API key authentication middleware
+const apiKey = process.env.MIDDLEWARE_API_KEY;
+if (!apiKey) {
+  console.warn('WARNING: MIDDLEWARE_API_KEY is not set — backend API is unprotected. Set this env var in production.');
+}
+app.use((req, res, next) => {
+  // Skip auth for health endpoint (used by Docker healthcheck)
+  if (req.path === '/health') return next();
+  // Skip auth if no API key is configured (backwards-compatible)
+  if (!apiKey) return next();
+
+  const provided = req.headers['x-api-key'];
+  if (provided !== apiKey) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  next();
+});
 
 // Shared store instance
 const store = new SqliteStore();
@@ -111,24 +131,27 @@ if (process.env.FEATURE_NOTIFICATIONS_ENABLED === 'true') {
     });
 
     scheduler.start();
-
-    // Graceful shutdown
-    const shutdown = () => {
-      console.log('Shutting down polling scheduler...');
-      scheduler!.stop();
-      process.exit(0);
-    };
-
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
   }
 }
 
+// Rate limiting
+const generalLimiter = rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: 'draft-7', legacyHeaders: false });
+const agentLimiter = rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: 'draft-7', legacyHeaders: false });
+
 // Routes
 app.use(healthRoutes);
-app.use(createNotificationRoutes(store, scheduler));
-app.use('/api/agent', agentRouter);
+app.use(generalLimiter, createNotificationRoutes(store, scheduler));
+app.use('/api/agent', agentLimiter, agentRouter);
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Indexer Tools Backend running on port ${port}`);
 });
+
+// Graceful shutdown
+const gracefulShutdown = () => {
+  console.log('Shutting down...');
+  if (scheduler) scheduler.stop();
+  server.close(() => process.exit(0));
+};
+process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);

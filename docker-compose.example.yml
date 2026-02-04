@@ -1,5 +1,5 @@
 services:
-  frontend:
+  indexer-tools-frontend:
     build:
       context: .
       target: frontend-prod
@@ -13,22 +13,29 @@ services:
     env_file:
       - .env
     environment:
-      - BACKEND_URL=http://backend:4000
+      - BACKEND_URL=http://indexer-tools-backend:4000
     depends_on:
-      backend:
+      indexer-tools-backend:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - indexer-tools
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
 
-  backend:
+  indexer-tools-backend:
     build:
       context: .
       target: backend-prod
     volumes:
-      - backend-data:/app/data
+      - indexer-tools-data:/app/data
     env_file:
       - .env
     healthcheck:
@@ -36,6 +43,16 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - indexer-tools
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
 
 volumes:
-  backend-data:
+  indexer-tools-data:
+
+networks:
+  indexer-tools:

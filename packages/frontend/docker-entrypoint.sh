@@ -30,8 +30,8 @@ JSON_STRING="{
 }"
 
 mkdir -p "$PUBLIC_DIR"
-echo $JSON_STRING > "$PUBLIC_DIR/indexer-tools-config.json"
-echo $JSON_STRING > "$DIST_DIR/indexer-tools-config.json"
+printf '%s' "$JSON_STRING" > "$PUBLIC_DIR/indexer-tools-config.json"
+printf '%s' "$JSON_STRING" > "$DIST_DIR/indexer-tools-config.json"
 
 # Copy blacklist file if mounted
 if [ -f /app/config/blacklist.txt ]; then

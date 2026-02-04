@@ -5,22 +5,38 @@ const path = require('path');
 const http = require('http');
 const url = require('url');
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://backend:4000';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://indexer-tools-backend:4000';
+const MIDDLEWARE_API_KEY = process.env.MIDDLEWARE_API_KEY;
 
 let app = express();
+
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '0');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // CSP: connect-src allows http: and https: because the app connects to user-configured
+  // endpoints (RPC providers, Graph gateways, indexer status endpoints) on arbitrary domains.
+  // img-src allows https: for subgraph images from external CDNs.
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; connect-src 'self' http: https:; font-src 'self' data: https://fonts.gstatic.com");
+  next();
+});
 
 // Proxy /api/* requests to the backend service
 app.use('/api', (req, res) => {
   const target = new url.URL(BACKEND_URL);
+  const proxyHeaders = { ...req.headers, host: target.host };
+  // Forward API key to backend if configured
+  if (MIDDLEWARE_API_KEY) {
+    proxyHeaders['x-api-key'] = MIDDLEWARE_API_KEY;
+  }
   const options = {
     hostname: target.hostname,
     port: target.port || 80,
     path: '/api' + req.url,
     method: req.method,
-    headers: {
-      ...req.headers,
-      host: target.host,
-    },
+    headers: proxyHeaders,
   };
 
   const proxyReq = http.request(options, (proxyRes) => {
