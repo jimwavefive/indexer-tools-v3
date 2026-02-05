@@ -175,9 +175,19 @@ export class SqliteStore {
     }
 
     // Migration: add polling_interval_seconds column to rules (per-rule polling override)
+    // Kept for backwards compatibility — new code uses polling_interval_minutes instead
     try {
       this.db.exec('ALTER TABLE rules ADD COLUMN polling_interval_seconds INTEGER');
-      console.log('Migration: added polling_interval_seconds column to rules');
+    } catch {
+      // Column already exists — ignore
+    }
+
+    // Migration: add polling_interval_minutes column to rules (replaces polling_interval_seconds)
+    try {
+      this.db.exec('ALTER TABLE rules ADD COLUMN polling_interval_minutes INTEGER');
+      // Migrate any existing per-rule overrides (seconds → minutes)
+      this.db.exec('UPDATE rules SET polling_interval_minutes = polling_interval_seconds / 60 WHERE polling_interval_seconds IS NOT NULL AND polling_interval_minutes IS NULL');
+      console.log('Migration: added polling_interval_minutes column to rules');
     } catch {
       // Column already exists — ignore
     }
@@ -247,12 +257,8 @@ export class SqliteStore {
       'INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)',
     );
     seedSetting.run(
-      'pollingIntervalSeconds',
-      process.env.POLLING_INTERVAL_SECONDS || '600',
-    );
-    seedSetting.run(
-      'cooldownMinutes',
-      process.env.COOLDOWN_MINUTES || '60',
+      'pollingIntervalMinutes',
+      process.env.POLLING_INTERVAL_MINUTES || '60',
     );
 
     // Seed default rules if table is empty
@@ -342,8 +348,7 @@ export class SqliteStore {
   async getRules(): Promise<RuleConfig[]> {
     const rows = this.db.prepare('SELECT * FROM rules').all() as Array<{
       id: string; name: string; type: string; enabled: number; conditions: string;
-      cooldown_minutes: number | null;
-      polling_interval_seconds: number | null;
+      polling_interval_minutes: number | null;
       last_polled_at: string | null;
     }>;
     return rows.map((r) => ({
@@ -352,15 +357,14 @@ export class SqliteStore {
       type: r.type,
       enabled: r.enabled === 1,
       conditions: JSON.parse(r.conditions),
-      cooldownMinutes: r.cooldown_minutes,
-      pollingIntervalSeconds: r.polling_interval_seconds,
+      pollingIntervalMinutes: r.polling_interval_minutes,
       lastPolledAt: r.last_polled_at,
     }));
   }
 
   async saveRules(rules: RuleConfig[]): Promise<void> {
     const insert = this.db.prepare(
-      'INSERT OR REPLACE INTO rules (id, name, type, enabled, conditions, cooldown_minutes, polling_interval_seconds, last_polled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT OR REPLACE INTO rules (id, name, type, enabled, conditions, polling_interval_minutes, last_polled_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
     );
     const tx = this.db.transaction(() => {
       this.db.prepare('DELETE FROM rules').run();
@@ -371,8 +375,7 @@ export class SqliteStore {
           r.type,
           r.enabled ? 1 : 0,
           JSON.stringify(r.conditions),
-          r.cooldownMinutes ?? null,
-          r.pollingIntervalSeconds ?? null,
+          r.pollingIntervalMinutes ?? null,
           r.lastPolledAt ?? null,
         );
       }

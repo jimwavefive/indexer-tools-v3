@@ -4,7 +4,7 @@ import type { HistoryRecord } from '../notifications/NotificationEngine.js';
 import type { Allocation } from '@indexer-tools/shared';
 import type { NetworkDataSnapshot, DeploymentStatus } from '../notifications/rules/Rule.js';
 
-const DEFAULT_POLLING_INTERVAL_SECONDS = 600; // 10 minutes
+const DEFAULT_POLLING_INTERVAL_MINUTES = 60; // 1 hour
 
 /**
  * PollingScheduler is a facade over RuleScheduler for backwards compatibility.
@@ -17,7 +17,7 @@ export class PollingScheduler {
   constructor(options: {
     store: SqliteStore;
     indexerAddress: string;
-    pollingIntervalSeconds?: number;
+    pollingIntervalMinutes?: number;
     indexerStatusEndpoint?: string;
   }) {
     this.ruleScheduler = new RuleScheduler(options);
@@ -41,8 +41,8 @@ export class PollingScheduler {
     this.ruleScheduler.stop();
   }
 
-  updateInterval(newIntervalSeconds: number): void {
-    this.ruleScheduler.updateGlobalInterval(newIntervalSeconds);
+  updateInterval(newIntervalMinutes: number): void {
+    this.ruleScheduler.updateGlobalInterval(newIntervalMinutes);
   }
 
   /**

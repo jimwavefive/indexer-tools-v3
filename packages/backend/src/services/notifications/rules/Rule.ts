@@ -54,7 +54,6 @@ export interface RuleConfig {
   type: string;
   enabled: boolean;
   conditions: Record<string, unknown>;
-  cooldownMinutes?: number | null; // Per-rule cooldown override (null = use global)
-  pollingIntervalSeconds?: number | null; // Per-rule polling interval (null = use global)
+  pollingIntervalMinutes?: number | null; // Per-rule polling interval (null = use global)
   lastPolledAt?: string | null; // Timestamp of last evaluation
 }

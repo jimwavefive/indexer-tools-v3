@@ -355,23 +355,12 @@
               <v-row>
                 <v-col cols="12" md="6">
                   <v-text-field
-                    v-model.number="settingsForm.pollingIntervalSeconds"
-                    label="Polling Interval (seconds)"
+                    v-model.number="settingsForm.pollingIntervalMinutes"
+                    label="Polling Interval (minutes)"
                     type="number"
-                    :min="60"
-                    :max="3600"
-                    hint="How often the backend checks for notification triggers (60-3600)"
-                    persistent-hint
-                  ></v-text-field>
-                </v-col>
-                <v-col cols="12" md="6">
-                  <v-text-field
-                    v-model.number="settingsForm.cooldownMinutes"
-                    label="Cooldown Duration (minutes)"
-                    type="number"
-                    :min="5"
-                    :max="1440"
-                    hint="Minimum time before re-sending a notification for the same incident (5-1440)"
+                    :min="1"
+                    :max="120"
+                    hint="Default interval for how often rules check for triggers and re-send notifications (1-120). Can be overridden per rule."
                     persistent-hint
                   ></v-text-field>
                 </v-col>
@@ -480,24 +469,12 @@
           </div>
 
           <v-text-field
-            v-model.number="ruleForm.cooldownMinutes"
-            label="Cooldown (minutes)"
+            v-model.number="ruleForm.pollingIntervalMinutes"
+            label="Polling Interval (minutes)"
             type="number"
-            :min="5"
-            :max="1440"
-            hint="Override global cooldown for this rule (leave empty to use global setting)"
-            persistent-hint
-            clearable
-            class="mb-2"
-          ></v-text-field>
-
-          <v-text-field
-            v-model.number="ruleForm.pollingIntervalSeconds"
-            label="Polling Interval (seconds)"
-            type="number"
-            :min="60"
-            :max="3600"
-            hint="Override global polling interval for this rule (leave empty to use global setting)"
+            :min="1"
+            :max="120"
+            hint="How often this rule checks for triggers and re-sends notifications for open incidents. Leave empty to use the global setting."
             persistent-hint
             clearable
             class="mb-2"
@@ -710,14 +687,12 @@ async function testRule(item) {
 
 // --- Settings ---
 const settingsForm = ref({
-  pollingIntervalSeconds: 600,
-  cooldownMinutes: 60,
+  pollingIntervalMinutes: 60,
 });
 
 async function saveSettings() {
   await store.updateSettings({
-    pollingIntervalSeconds: Math.max(60, Math.min(3600, settingsForm.value.pollingIntervalSeconds)),
-    cooldownMinutes: Math.max(5, Math.min(1440, settingsForm.value.cooldownMinutes)),
+    pollingIntervalMinutes: Math.max(1, Math.min(120, settingsForm.value.pollingIntervalMinutes)),
   });
   settingsForm.value = { ...store.settings };
 }
@@ -734,8 +709,7 @@ function defaultRuleForm() {
     enabled: true,
     conditions: { allowedActions: ['acknowledge', 'resolve'] },
     channels: [],
-    cooldownMinutes: null,
-    pollingIntervalSeconds: null,
+    pollingIntervalMinutes: null,
   };
 }
 
@@ -752,8 +726,7 @@ function openRuleDialog(rule) {
       enabled: rule.enabled,
       conditions,
       channels: rule.channels ? [...rule.channels] : [],
-      cooldownMinutes: rule.cooldownMinutes ?? null,
-      pollingIntervalSeconds: rule.pollingIntervalSeconds ?? null,
+      pollingIntervalMinutes: rule.pollingIntervalMinutes ?? null,
     };
   } else {
     editingRule.value = null;
