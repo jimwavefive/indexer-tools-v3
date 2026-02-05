@@ -5,7 +5,7 @@ import type { Allocation } from '@indexer-tools/shared';
 import type { NetworkDataSnapshot, DeploymentStatus, RuleConfig } from '../notifications/rules/Rule.js';
 import type { Channel } from '../notifications/channels/Channel.js';
 
-const DEFAULT_POLLING_INTERVAL_SECONDS = 600; // 10 minutes
+const DEFAULT_POLLING_INTERVAL_MINUTES = 60; // 1 hour
 const MIN_DATA_FETCH_INTERVAL_MS = 60 * 1000; // Minimum 1 minute between data fetches
 
 interface RuleTimer {
@@ -43,7 +43,7 @@ export class RuleScheduler {
   constructor(options: {
     store: SqliteStore;
     indexerAddress: string;
-    pollingIntervalSeconds?: number;
+    pollingIntervalMinutes?: number;
     indexerStatusEndpoint?: string;
   }) {
     this.poller = new NetworkPoller();
@@ -51,7 +51,7 @@ export class RuleScheduler {
     this.indexerAddress = options.indexerAddress;
     this.indexerStatusEndpointOverride = options.indexerStatusEndpoint;
     this.globalIntervalMs =
-      (options.pollingIntervalSeconds ?? DEFAULT_POLLING_INTERVAL_SECONDS) * 1000;
+      (options.pollingIntervalMinutes ?? DEFAULT_POLLING_INTERVAL_MINUTES) * 60 * 1000;
 
     this.engine = new NotificationEngine({
       store: this.store,
@@ -65,7 +65,7 @@ export class RuleScheduler {
 
   async start(): Promise<void> {
     console.log(
-      `RuleScheduler starting for indexer ${this.indexerAddress} (global interval: ${this.globalIntervalMs / 1000}s)`,
+      `RuleScheduler starting for indexer ${this.indexerAddress} (global interval: ${this.globalIntervalMs / 60000}m)`,
     );
 
     // Initial data fetch
@@ -110,7 +110,7 @@ export class RuleScheduler {
 
     // Add or update timers for enabled rules
     for (const rule of enabledRules) {
-      const intervalMs = (rule.pollingIntervalSeconds ?? this.globalIntervalMs / 1000) * 1000;
+      const intervalMs = (rule.pollingIntervalMinutes ?? this.globalIntervalMs / 60000) * 60 * 1000;
       const existing = this.ruleTimers.get(rule.id);
 
       if (existing) {
@@ -125,7 +125,7 @@ export class RuleScheduler {
               console.error(`Scheduled evaluation for rule ${rule.id} failed:`, err)
             );
           }, intervalMs);
-          console.log(`RuleScheduler: updated timer for rule ${rule.id} to ${intervalMs / 1000}s`);
+          console.log(`RuleScheduler: updated timer for rule ${rule.id} to ${intervalMs / 60000}m`);
         }
       } else {
         // Create new timer
@@ -141,7 +141,7 @@ export class RuleScheduler {
           timer,
         });
 
-        console.log(`RuleScheduler: created timer for rule ${rule.id} (${intervalMs / 1000}s)`);
+        console.log(`RuleScheduler: created timer for rule ${rule.id} (${intervalMs / 60000}m)`);
 
         // Run initial evaluation immediately
         this.evaluateRule(rule.id).catch((err) =>
@@ -154,9 +154,9 @@ export class RuleScheduler {
   /**
    * Update the global polling interval.
    */
-  updateGlobalInterval(newIntervalSeconds: number): void {
-    this.globalIntervalMs = newIntervalSeconds * 1000;
-    console.log(`RuleScheduler: global interval updated to ${newIntervalSeconds}s`);
+  updateGlobalInterval(newIntervalMinutes: number): void {
+    this.globalIntervalMs = newIntervalMinutes * 60 * 1000;
+    console.log(`RuleScheduler: global interval updated to ${newIntervalMinutes}m`);
     // Resync timers to pick up rules that use global interval
     this.syncRuleTimers().catch((err) =>
       console.error('Failed to sync rule timers after interval update:', err)

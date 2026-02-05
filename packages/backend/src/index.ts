@@ -77,6 +77,9 @@ async function syncEnvChannels(store: SqliteStore): Promise<void> {
 const app = express();
 const port = parseInt(process.env.PORT || '4000', 10);
 
+// Trust the frontend proxy (X-Forwarded-For) for correct rate-limit identification
+app.set('trust proxy', 1);
+
 app.use(cors({ origin: process.env.MIDDLEWARE_CORS_ORIGIN || '*' }));
 app.use(express.json({ limit: '100kb' }));
 
@@ -119,8 +122,8 @@ if (process.env.FEATURE_NOTIFICATIONS_ENABLED === 'true') {
       'FEATURE_NOTIFICATIONS_ENABLED is true but INDEXER_ADDRESS is not set. Notifications will not start.',
     );
   } else {
-    const pollingIntervalSeconds = parseInt(
-      store.getSetting('pollingIntervalSeconds') || process.env.POLLING_INTERVAL_SECONDS || '600',
+    const pollingIntervalMinutes = parseInt(
+      store.getSetting('pollingIntervalMinutes') || process.env.POLLING_INTERVAL_MINUTES || '60',
       10,
     );
 
@@ -134,7 +137,7 @@ if (process.env.FEATURE_NOTIFICATIONS_ENABLED === 'true') {
     scheduler = new PollingScheduler({
       store,
       indexerAddress,
-      pollingIntervalSeconds,
+      pollingIntervalMinutes,
       indexerStatusEndpoint,
     });
 

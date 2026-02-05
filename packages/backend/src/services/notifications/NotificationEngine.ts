@@ -12,8 +12,6 @@ import { BehindChainheadAllocatedRule } from './rules/BehindChainheadAllocatedRu
 import { DiscordChannel } from './channels/DiscordChannel.js';
 import type { SqliteStore } from '../../db/sqliteStore.js';
 
-const DEFAULT_COOLDOWN_MINUTES = 60;
-
 export interface HistoryRecord {
   id: string;
   incidentId?: string;
@@ -81,15 +79,8 @@ export class NotificationEngine {
       deploymentStatuses,
     };
 
-    const globalCooldownMinutes = parseInt(
-      this.store.getSetting('cooldownMinutes') || String(DEFAULT_COOLDOWN_MINUTES),
-      10,
-    );
     const now = new Date();
     const nowIso = now.toISOString();
-
-    // Build map of rule configs for cooldown lookup
-    const ruleConfigMap = new Map(ruleConfigs.map((r) => [r.id, r]));
 
     // Track which rule:target combos fired this cycle for auto-resolution
     const firedKeys = new Set<string>();
@@ -132,15 +123,8 @@ export class NotificationEngine {
             continue;
           }
 
-          // Check cooldown: send again only if enough time has passed since last notification
-          // Per-rule cooldown takes precedence over global setting
-          const ruleConfig = ruleConfigMap.get(rule.id);
-          const cooldownMinutes = ruleConfig?.cooldownMinutes ?? globalCooldownMinutes;
-          const cooldownMs = cooldownMinutes * 60 * 1000;
-          const lastNotified = new Date(existing.last_notified_at || existing.first_seen).getTime();
-          if (now.getTime() - lastNotified >= cooldownMs) {
-            toSend.push({ notification, incidentId: existing.id });
-          }
+          // Re-send notification on every evaluation (polling interval controls frequency)
+          toSend.push({ notification, incidentId: existing.id });
         } else {
           // Create new incident
           const incidentId = generateId();

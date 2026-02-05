@@ -9,8 +9,7 @@ export const useNotificationRulesStore = defineStore('notificationRules', {
     history: [],
     incidents: [],
     settings: {
-      pollingIntervalSeconds: 600,
-      cooldownMinutes: 60,
+      pollingIntervalMinutes: 60,
     },
     loading: false,
   }),

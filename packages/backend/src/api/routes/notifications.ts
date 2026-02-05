@@ -57,8 +57,7 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
         type: body.type,
         enabled: body.enabled ?? true,
         conditions: body.conditions ?? {},
-        cooldownMinutes: body.cooldownMinutes ?? null,
-        pollingIntervalSeconds: body.pollingIntervalSeconds ?? null,
+        pollingIntervalMinutes: body.pollingIntervalMinutes ?? null,
       };
 
       const rules = await store.getRules();
@@ -407,8 +406,7 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
     try {
       const settings = store.getSettings();
       res.json({
-        pollingIntervalSeconds: parseInt(settings.pollingIntervalSeconds || '600', 10),
-        cooldownMinutes: parseInt(settings.cooldownMinutes || '60', 10),
+        pollingIntervalMinutes: parseInt(settings.pollingIntervalMinutes || '60', 10),
       });
     } catch (err) {
       console.error('Failed to get settings:', err);
@@ -418,29 +416,22 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
 
   router.put('/api/notifications/settings', async (req: Request, res: Response) => {
     try {
-      const { pollingIntervalSeconds, cooldownMinutes } = req.body as {
-        pollingIntervalSeconds?: number;
-        cooldownMinutes?: number;
+      const { pollingIntervalMinutes } = req.body as {
+        pollingIntervalMinutes?: number;
       };
 
-      if (pollingIntervalSeconds !== undefined) {
-        const clamped = Math.max(60, Math.min(3600, pollingIntervalSeconds));
-        store.setSetting('pollingIntervalSeconds', String(clamped));
+      if (pollingIntervalMinutes !== undefined) {
+        const clamped = Math.max(1, Math.min(120, pollingIntervalMinutes));
+        store.setSetting('pollingIntervalMinutes', String(clamped));
 
         if (scheduler) {
           scheduler.updateInterval(clamped);
         }
       }
 
-      if (cooldownMinutes !== undefined) {
-        const clamped = Math.max(5, Math.min(1440, cooldownMinutes));
-        store.setSetting('cooldownMinutes', String(clamped));
-      }
-
       const settings = store.getSettings();
       res.json({
-        pollingIntervalSeconds: parseInt(settings.pollingIntervalSeconds || '600', 10),
-        cooldownMinutes: parseInt(settings.cooldownMinutes || '60', 10),
+        pollingIntervalMinutes: parseInt(settings.pollingIntervalMinutes || '60', 10),
       });
     } catch (err) {
       console.error('Failed to update settings:', err);

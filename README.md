@@ -70,7 +70,7 @@ All environment variables are documented in [`.env.example`](./.env.example) wit
 | QoS Subgraph | `DEFAULT_QOS_SUBGRAPH` | Runtime |
 | Chain Validation | `CHAIN_VALIDATION_RPCS` | Runtime |
 | Feature Flags | `VITE_FEATURE_NOTIFICATIONS`, `VITE_FEATURE_AGENT` | Build-time |
-| Backend: Notifications | `FEATURE_NOTIFICATIONS_ENABLED`, `INDEXER_ADDRESS`, `POLLING_INTERVAL_SECONDS`, `NETWORK_SUBGRAPH_URL` | Runtime |
+| Backend: Notifications | `FEATURE_NOTIFICATIONS_ENABLED`, `INDEXER_ADDRESS`, `POLLING_INTERVAL_MINUTES`, `NETWORK_SUBGRAPH_URL` | Runtime |
 | Backend: AI Agent | `FEATURE_AGENT_ENABLED`, `AI_PROVIDER`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OLLAMA_BASE_URL` | Runtime |
 
 **Build-time** variables (`VITE_*`) are baked into the frontend during `docker compose build`. Changing them requires a rebuild.
