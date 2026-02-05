@@ -189,8 +189,19 @@
                     size="x-small"
                     variant="outlined"
                     color="success"
+                    class="mr-1"
                     @click="resolveIncident(item)"
                   >Resolve</v-btn>
+                  <v-btn
+                    v-if="featureFlagStore.isEnabled('agent') && item.status !== 'resolved' && canAutofix(item.rule_id)"
+                    size="x-small"
+                    variant="tonal"
+                    color="primary"
+                    @click="openAutofix(item)"
+                  >
+                    <v-icon start size="small">mdi-robot</v-icon>
+                    Autofix
+                  </v-btn>
                 </template>
                 <template #expanded-row="{ columns, item }">
                   <tr>
@@ -468,6 +479,30 @@
             ></v-checkbox>
           </div>
 
+          <v-text-field
+            v-model.number="ruleForm.cooldownMinutes"
+            label="Cooldown (minutes)"
+            type="number"
+            :min="5"
+            :max="1440"
+            hint="Override global cooldown for this rule (leave empty to use global setting)"
+            persistent-hint
+            clearable
+            class="mb-2"
+          ></v-text-field>
+
+          <v-text-field
+            v-model.number="ruleForm.pollingIntervalSeconds"
+            label="Polling Interval (seconds)"
+            type="number"
+            :min="60"
+            :max="3600"
+            hint="Override global polling interval for this rule (leave empty to use global setting)"
+            persistent-hint
+            clearable
+            class="mb-2"
+          ></v-text-field>
+
           <v-select
             v-model="ruleForm.channels"
             :items="store.channels"
@@ -552,6 +587,9 @@
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="4000" location="bottom right">
       {{ snackbar.text }}
     </v-snackbar>
+
+    <!-- ========== INCIDENT AGENT CHAT ========== -->
+    <IncidentAgentChat v-if="featureFlagStore.isEnabled('agent')" />
   </div>
 </template>
 
@@ -560,10 +598,13 @@ import { ref, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useNotificationRulesStore } from '@/store/notificationRules';
 import { useFeatureFlagStore } from '@/store/featureFlags';
+import { useAgentStore } from '@/store/agent';
+import IncidentAgentChat from '@/components/IncidentAgentChat.vue';
 
 const router = useRouter();
 const store = useNotificationRulesStore();
 const featureFlagStore = useFeatureFlagStore();
+const agentStore = useAgentStore();
 
 // Guard: redirect if notifications feature flag is not enabled
 if (!featureFlagStore.isEnabled('notifications')) {
@@ -693,6 +734,8 @@ function defaultRuleForm() {
     enabled: true,
     conditions: { allowedActions: ['acknowledge', 'resolve'] },
     channels: [],
+    cooldownMinutes: null,
+    pollingIntervalSeconds: null,
   };
 }
 
@@ -709,6 +752,8 @@ function openRuleDialog(rule) {
       enabled: rule.enabled,
       conditions,
       channels: rule.channels ? [...rule.channels] : [],
+      cooldownMinutes: rule.cooldownMinutes ?? null,
+      pollingIntervalSeconds: rule.pollingIntervalSeconds ?? null,
     };
   } else {
     editingRule.value = null;
@@ -930,6 +975,19 @@ function getAllowedActions(ruleId) {
   const actions = rule?.conditions?.allowedActions;
   if (!Array.isArray(actions)) return ['acknowledge', 'resolve'];
   return actions;
+}
+
+// Rules that support AI-assisted autofix
+const AUTOFIX_RULE_TYPES = ['failed_subgraph', 'behind_chainhead'];
+
+function canAutofix(ruleId) {
+  const rule = store.rules.find((r) => r.id === ruleId);
+  if (!rule) return false;
+  return AUTOFIX_RULE_TYPES.includes(rule.type);
+}
+
+function openAutofix(item) {
+  agentStore.openIncidentChat(item.id);
 }
 
 // --- Tab change: load data for active tab ---

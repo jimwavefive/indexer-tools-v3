@@ -57,11 +57,20 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
         type: body.type,
         enabled: body.enabled ?? true,
         conditions: body.conditions ?? {},
+        cooldownMinutes: body.cooldownMinutes ?? null,
+        pollingIntervalSeconds: body.pollingIntervalSeconds ?? null,
       };
 
       const rules = await store.getRules();
       rules.push(newRule);
       await store.saveRules(rules);
+
+      // Sync rule timers to pick up the new rule
+      if (scheduler) {
+        scheduler.syncRuleTimers().catch((err) => {
+          console.error('Failed to sync rule timers:', err);
+        });
+      }
 
       res.status(201).json(newRule);
     } catch (err) {
@@ -89,6 +98,14 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
       };
 
       await store.saveRules(rules);
+
+      // Sync rule timers to pick up changes (enabled state, polling interval)
+      if (scheduler) {
+        scheduler.syncRuleTimers().catch((err) => {
+          console.error('Failed to sync rule timers:', err);
+        });
+      }
+
       res.json(rules[index]);
     } catch (err) {
       console.error('Failed to update rule:', err);
@@ -108,6 +125,14 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
       }
 
       await store.saveRules(filtered);
+
+      // Sync rule timers to remove the deleted rule's timer
+      if (scheduler) {
+        scheduler.syncRuleTimers().catch((err) => {
+          console.error('Failed to sync rule timers:', err);
+        });
+      }
+
       res.status(204).send();
     } catch (err) {
       console.error('Failed to delete rule:', err);
