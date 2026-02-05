@@ -19,6 +19,9 @@ import {
   proposeRebalanceDefinition,
   proposeRebalance,
 } from './proposeRebalance.js';
+import { incidentTools, setStoreRef as setIncidentStoreRef } from './incidentTools.js';
+import { investigationTools, setSchedulerRef } from './investigationTools.js';
+import { graphmanTools, setGraphmanStoreRef, setGraphmanContext } from './graphmanTools.js';
 
 export interface AgentTool {
   definition: ToolDefinition;
@@ -46,6 +49,9 @@ export const agentTools: AgentTool[] = [
     definition: proposeRebalanceDefinition,
     execute: (args) => proposeRebalance(args as any),
   },
+  ...incidentTools,
+  ...investigationTools,
+  ...graphmanTools,
 ];
 
 export {
@@ -54,4 +60,8 @@ export {
   getEpochInfo,
   getDeploymentHealth,
   proposeRebalance,
+  setIncidentStoreRef,
+  setSchedulerRef,
+  setGraphmanStoreRef,
+  setGraphmanContext,
 };

@@ -166,6 +166,82 @@ export class SqliteStore {
       // Column already exists — ignore
     }
 
+    // Migration: add cooldown_minutes column to rules (per-rule cooldown override)
+    try {
+      this.db.exec('ALTER TABLE rules ADD COLUMN cooldown_minutes INTEGER');
+      console.log('Migration: added cooldown_minutes column to rules');
+    } catch {
+      // Column already exists — ignore
+    }
+
+    // Migration: add polling_interval_seconds column to rules (per-rule polling override)
+    try {
+      this.db.exec('ALTER TABLE rules ADD COLUMN polling_interval_seconds INTEGER');
+      console.log('Migration: added polling_interval_seconds column to rules');
+    } catch {
+      // Column already exists — ignore
+    }
+
+    // Migration: add last_polled_at column to rules (for per-rule polling)
+    try {
+      this.db.exec('ALTER TABLE rules ADD COLUMN last_polled_at TEXT');
+      console.log('Migration: added last_polled_at column to rules');
+    } catch {
+      // Column already exists — ignore
+    }
+
+    // Agent infrastructure tables
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS conversations (
+        id TEXT PRIMARY KEY,
+        incident_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active'
+      );
+
+      CREATE TABLE IF NOT EXISTS conversation_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        tool_call_id TEXT,
+        tool_name TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id TEXT,
+        incident_id TEXT,
+        action_type TEXT NOT NULL,
+        tool_name TEXT,
+        tool_args TEXT,
+        result TEXT,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_approvals (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        incident_id TEXT,
+        action_type TEXT NOT NULL,
+        action_args TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT NOT NULL,
+        approved_at TEXT,
+        executed_at TEXT,
+        result TEXT,
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_conversations_incident ON conversations(incident_id);
+      CREATE INDEX IF NOT EXISTS idx_conversation_messages_conv ON conversation_messages(conversation_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_audit_incident ON agent_audit_log(incident_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_approvals_conv ON agent_approvals(conversation_id);
+    `);
+
     // Seed default settings if not present
     const seedSetting = this.db.prepare(
       'INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)',
@@ -266,6 +342,9 @@ export class SqliteStore {
   async getRules(): Promise<RuleConfig[]> {
     const rows = this.db.prepare('SELECT * FROM rules').all() as Array<{
       id: string; name: string; type: string; enabled: number; conditions: string;
+      cooldown_minutes: number | null;
+      polling_interval_seconds: number | null;
+      last_polled_at: string | null;
     }>;
     return rows.map((r) => ({
       id: r.id,
@@ -273,20 +352,36 @@ export class SqliteStore {
       type: r.type,
       enabled: r.enabled === 1,
       conditions: JSON.parse(r.conditions),
+      cooldownMinutes: r.cooldown_minutes,
+      pollingIntervalSeconds: r.polling_interval_seconds,
+      lastPolledAt: r.last_polled_at,
     }));
   }
 
   async saveRules(rules: RuleConfig[]): Promise<void> {
     const insert = this.db.prepare(
-      'INSERT OR REPLACE INTO rules (id, name, type, enabled, conditions) VALUES (?, ?, ?, ?, ?)',
+      'INSERT OR REPLACE INTO rules (id, name, type, enabled, conditions, cooldown_minutes, polling_interval_seconds, last_polled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     );
     const tx = this.db.transaction(() => {
       this.db.prepare('DELETE FROM rules').run();
       for (const r of rules) {
-        insert.run(r.id, r.name, r.type, r.enabled ? 1 : 0, JSON.stringify(r.conditions));
+        insert.run(
+          r.id,
+          r.name,
+          r.type,
+          r.enabled ? 1 : 0,
+          JSON.stringify(r.conditions),
+          r.cooldownMinutes ?? null,
+          r.pollingIntervalSeconds ?? null,
+          r.lastPolledAt ?? null,
+        );
       }
     });
     tx();
+  }
+
+  updateRuleLastPolledAt(ruleId: string, timestamp: string): void {
+    this.db.prepare('UPDATE rules SET last_polled_at = ? WHERE id = ?').run(timestamp, ruleId);
   }
 
   // --- Channels ---
@@ -538,5 +633,237 @@ export class SqliteStore {
       result[row.key] = row.value;
     }
     return result;
+  }
+
+  // --- Agent Conversations ---
+
+  createConversation(id: string, incidentId?: string): void {
+    const now = new Date().toISOString();
+    this.db.prepare(
+      'INSERT INTO conversations (id, incident_id, created_at, updated_at, status) VALUES (?, ?, ?, ?, ?)',
+    ).run(id, incidentId || null, now, now, 'active');
+  }
+
+  getConversation(id: string): { id: string; incident_id: string | null; created_at: string; updated_at: string; status: string } | null {
+    return this.db.prepare('SELECT * FROM conversations WHERE id = ?').get(id) as any;
+  }
+
+  getConversationByIncident(incidentId: string): { id: string; incident_id: string | null; created_at: string; updated_at: string; status: string } | null {
+    return this.db.prepare("SELECT * FROM conversations WHERE incident_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1").get(incidentId) as any;
+  }
+
+  updateConversationStatus(id: string, status: string): void {
+    const now = new Date().toISOString();
+    this.db.prepare('UPDATE conversations SET status = ?, updated_at = ? WHERE id = ?').run(status, now, id);
+  }
+
+  appendConversationMessage(conversationId: string, message: {
+    role: string;
+    content: string;
+    tool_call_id?: string;
+    tool_name?: string;
+  }): void {
+    const now = new Date().toISOString();
+    this.db.prepare(
+      'INSERT INTO conversation_messages (conversation_id, role, content, tool_call_id, tool_name, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run(conversationId, message.role, message.content, message.tool_call_id || null, message.tool_name || null, now);
+
+    // Update conversation timestamp
+    this.db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId);
+  }
+
+  getConversationMessages(conversationId: string): Array<{
+    id: number;
+    role: string;
+    content: string;
+    tool_call_id: string | null;
+    tool_name: string | null;
+    created_at: string;
+  }> {
+    return this.db.prepare(
+      'SELECT * FROM conversation_messages WHERE conversation_id = ? ORDER BY id ASC',
+    ).all(conversationId) as any[];
+  }
+
+  listConversations(options?: { incidentId?: string; status?: string; limit?: number }): Array<{
+    id: string;
+    incident_id: string | null;
+    created_at: string;
+    updated_at: string;
+    status: string;
+    message_count: number;
+  }> {
+    let sql = `
+      SELECT c.*, COUNT(m.id) as message_count
+      FROM conversations c
+      LEFT JOIN conversation_messages m ON m.conversation_id = c.id
+    `;
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (options?.incidentId) {
+      conditions.push('c.incident_id = ?');
+      params.push(options.incidentId);
+    }
+    if (options?.status) {
+      conditions.push('c.status = ?');
+      params.push(options.status);
+    }
+
+    if (conditions.length > 0) {
+      sql += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    sql += ' GROUP BY c.id ORDER BY c.updated_at DESC';
+
+    if (options?.limit) {
+      sql += ' LIMIT ?';
+      params.push(options.limit);
+    }
+
+    return this.db.prepare(sql).all(...params) as any[];
+  }
+
+  // --- Agent Audit Log ---
+
+  logAgentAction(entry: {
+    conversation_id?: string;
+    incident_id?: string;
+    action_type: string;
+    tool_name?: string;
+    tool_args?: string;
+    result?: string;
+  }): void {
+    const now = new Date().toISOString();
+    this.db.prepare(
+      'INSERT INTO agent_audit_log (conversation_id, incident_id, action_type, tool_name, tool_args, result, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).run(
+      entry.conversation_id || null,
+      entry.incident_id || null,
+      entry.action_type,
+      entry.tool_name || null,
+      entry.tool_args || null,
+      entry.result || null,
+      now,
+    );
+  }
+
+  getAgentAuditLog(options?: { incidentId?: string; conversationId?: string; limit?: number }): Array<{
+    id: number;
+    conversation_id: string | null;
+    incident_id: string | null;
+    action_type: string;
+    tool_name: string | null;
+    tool_args: string | null;
+    result: string | null;
+    created_at: string;
+  }> {
+    let sql = 'SELECT * FROM agent_audit_log';
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (options?.incidentId) {
+      conditions.push('incident_id = ?');
+      params.push(options.incidentId);
+    }
+    if (options?.conversationId) {
+      conditions.push('conversation_id = ?');
+      params.push(options.conversationId);
+    }
+
+    if (conditions.length > 0) {
+      sql += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    sql += ' ORDER BY created_at DESC';
+
+    if (options?.limit) {
+      sql += ' LIMIT ?';
+      params.push(options.limit);
+    }
+
+    return this.db.prepare(sql).all(...params) as any[];
+  }
+
+  // --- Agent Approvals ---
+
+  createApproval(approval: {
+    id: string;
+    conversation_id: string;
+    incident_id?: string;
+    action_type: string;
+    action_args: Record<string, unknown>;
+  }): void {
+    const now = new Date().toISOString();
+    this.db.prepare(
+      'INSERT INTO agent_approvals (id, conversation_id, incident_id, action_type, action_args, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).run(
+      approval.id,
+      approval.conversation_id,
+      approval.incident_id || null,
+      approval.action_type,
+      JSON.stringify(approval.action_args),
+      'pending',
+      now,
+    );
+  }
+
+  getApproval(id: string): {
+    id: string;
+    conversation_id: string;
+    incident_id: string | null;
+    action_type: string;
+    action_args: Record<string, unknown>;
+    status: string;
+    created_at: string;
+    approved_at: string | null;
+    executed_at: string | null;
+    result: string | null;
+  } | null {
+    const row = this.db.prepare('SELECT * FROM agent_approvals WHERE id = ?').get(id) as any;
+    if (!row) return null;
+    return { ...row, action_args: JSON.parse(row.action_args) };
+  }
+
+  getPendingApproval(conversationId: string): {
+    id: string;
+    conversation_id: string;
+    incident_id: string | null;
+    action_type: string;
+    action_args: Record<string, unknown>;
+    status: string;
+    created_at: string;
+    approved_at: string | null;
+    executed_at: string | null;
+    result: string | null;
+  } | null {
+    const row = this.db.prepare(
+      "SELECT * FROM agent_approvals WHERE conversation_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1",
+    ).get(conversationId) as any;
+    if (!row) return null;
+    return { ...row, action_args: JSON.parse(row.action_args) };
+  }
+
+  approveApproval(id: string): boolean {
+    const now = new Date().toISOString();
+    const result = this.db.prepare(
+      "UPDATE agent_approvals SET status = 'approved', approved_at = ? WHERE id = ? AND status = 'pending'",
+    ).run(now, id);
+    return result.changes > 0;
+  }
+
+  rejectApproval(id: string): boolean {
+    const now = new Date().toISOString();
+    const result = this.db.prepare(
+      "UPDATE agent_approvals SET status = 'rejected', approved_at = ? WHERE id = ? AND status = 'pending'",
+    ).run(now, id);
+    return result.changes > 0;
+  }
+
+  markApprovalExecuted(id: string, result: string): void {
+    const now = new Date().toISOString();
+    this.db.prepare(
+      "UPDATE agent_approvals SET status = 'executed', executed_at = ?, result = ? WHERE id = ?",
+    ).run(now, result, id);
   }
 }

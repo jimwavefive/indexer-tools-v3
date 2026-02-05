@@ -3,7 +3,7 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import healthRoutes from './api/routes/health.js';
 import { createNotificationRoutes } from './api/routes/notifications.js';
-import agentRouter from './api/routes/agent.js';
+import agentRouter, { initializeAgentRoutes } from './api/routes/agent.js';
 import { SqliteStore } from './db/sqliteStore.js';
 import { PollingScheduler } from './services/poller/scheduler.js';
 import type { ChannelConfig } from './services/notifications/channels/Channel.js';
@@ -141,6 +141,9 @@ if (process.env.FEATURE_NOTIFICATIONS_ENABLED === 'true') {
     scheduler.start();
   }
 }
+
+// Initialize agent routes with store and scheduler for incident tools
+initializeAgentRoutes(store, scheduler);
 
 // Rate limiting
 const generalLimiter = rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: 'draft-7', legacyHeaders: false });
