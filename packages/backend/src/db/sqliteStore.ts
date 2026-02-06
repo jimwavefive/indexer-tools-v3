@@ -688,6 +688,11 @@ export class SqliteStore {
     ).all(conversationId) as any[];
   }
 
+  deleteConversation(conversationId: string): void {
+    this.db.prepare('DELETE FROM conversation_messages WHERE conversation_id = ?').run(conversationId);
+    this.db.prepare('DELETE FROM conversations WHERE id = ?').run(conversationId);
+  }
+
   listConversations(options?: { incidentId?: string; status?: string; limit?: number }): Array<{
     id: string;
     incident_id: string | null;

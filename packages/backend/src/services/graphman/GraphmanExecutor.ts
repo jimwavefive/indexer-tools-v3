@@ -57,7 +57,7 @@ export class GraphmanExecutor {
       };
     }
 
-    const command = `graphman rewind ${deploymentHash} ${blockNumber} ${blockHash}`;
+    const command = `graphman rewind --block-hash ${blockHash} --block-number ${blockNumber} ${deploymentHash}`;
 
     if (this.dryRun) {
       console.log(`[GraphmanExecutor] DRY RUN: Would execute: docker exec ${this.containerName} ${command}`);

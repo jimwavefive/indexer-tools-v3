@@ -193,6 +193,17 @@
                     @click="resolveIncident(item)"
                   >Resolve</v-btn>
                   <v-btn
+                    v-if="item.status !== 'resolved' && isFailedSubgraphRule(item.rule_id)"
+                    size="x-small"
+                    variant="tonal"
+                    color="warning"
+                    :loading="fixCommandsLoading === item.id"
+                    @click="openFixCommands(item)"
+                  >
+                    <v-icon start size="small">mdi-wrench</v-icon>
+                    Fix
+                  </v-btn>
+                  <v-btn
                     v-if="featureFlagStore.isEnabled('agent') && item.status !== 'resolved' && canAutofix(item.rule_id)"
                     size="x-small"
                     variant="tonal"
@@ -560,6 +571,78 @@
       </v-card>
     </v-dialog>
 
+    <!-- ========== FIX COMMANDS DIALOG ========== -->
+    <v-dialog v-model="fixCommandsDialogOpen" max-width="900" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon start>mdi-wrench</v-icon>
+          Fix Commands
+          <v-spacer></v-spacer>
+          <v-btn icon size="small" variant="text" @click="fixCommandsDialogOpen = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-card-text v-if="fixCommandsData">
+          <!-- Summary -->
+          <v-alert v-if="fixCommandsData.staleDeployments.length > 0" type="success" variant="tonal" density="compact" class="mb-3">
+            {{ fixCommandsData.staleDeployments.length }} stale failure(s) can be fixed with graphman rewind
+          </v-alert>
+          <v-alert v-if="fixCommandsData.genuineFailures.length > 0" type="warning" variant="tonal" density="compact" class="mb-3">
+            {{ fixCommandsData.genuineFailures.length }} genuine failure(s) cannot be fixed by rewind (need subgraph code fixes)
+          </v-alert>
+          <v-alert v-if="fixCommandsData.unknownDeployments?.length > 0" type="info" variant="tonal" density="compact" class="mb-3">
+            {{ fixCommandsData.unknownDeployments.length }} deployment(s) have unknown status (no cached data)
+          </v-alert>
+          <v-alert v-if="fixCommandsData.staleDeployments.length === 0 && fixCommandsData.genuineFailures.length === 0" type="info" variant="tonal" density="compact" class="mb-3">
+            No deployment status data available. The poller may not have run yet.
+          </v-alert>
+
+          <!-- Bash Script (primary output) -->
+          <div v-if="fixCommandsData.script" class="mb-4">
+            <div class="d-flex align-center mb-2">
+              <span class="text-subtitle-2">Bash Script</span>
+              <v-spacer></v-spacer>
+              <v-btn size="small" variant="outlined" @click="copyScript">
+                <v-icon start size="small">mdi-content-copy</v-icon>
+                Copy Script
+              </v-btn>
+            </div>
+            <pre class="fix-script-block">{{ fixCommandsData.script }}</pre>
+          </div>
+
+          <!-- Genuine Failures detail -->
+          <div v-if="fixCommandsData.genuineFailures.length > 0">
+            <div class="text-subtitle-2 mb-2">Genuine Failures (not fixable)</div>
+            <v-table density="compact" class="text-caption mb-4">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Deployment</th>
+                  <th>Error</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(f, idx) in fixCommandsData.genuineFailures" :key="idx">
+                  <td>{{ f.name }}</td>
+                  <td style="font-family: monospace; font-size: 0.75rem">{{ f.hash }}</td>
+                  <td class="text-caption" style="max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis" :title="f.error">{{ f.error }}</td>
+                </tr>
+              </tbody>
+            </v-table>
+          </div>
+        </v-card-text>
+        <v-card-text v-else-if="fixCommandsError" class="text-center py-8">
+          <v-icon size="large" color="error" class="mb-2">mdi-alert-circle</v-icon>
+          <div class="text-body-2">{{ fixCommandsError }}</div>
+        </v-card-text>
+        <v-card-text v-else class="text-center py-8">
+          <v-progress-circular indeterminate color="primary"></v-progress-circular>
+          <div class="mt-2 text-body-2">Fetching fresh deployment statuses from graph-node...</div>
+          <div class="text-caption text-medium-emphasis">This may take a few seconds</div>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <!-- ========== SNACKBAR ========== -->
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="4000" location="bottom right">
       {{ snackbar.text }}
@@ -614,7 +697,7 @@ const incidentHeaders = [
   { title: 'First Seen', key: 'first_seen' },
   { title: 'Last Seen', key: 'last_seen' },
   { title: 'Count', key: 'occurrence_count', width: '80px' },
-  { title: 'Actions', key: 'actions', sortable: false, width: '160px' },
+  { title: 'Actions', key: 'actions', sortable: false, width: '220px' },
 ];
 
 const historyHeaders = [
@@ -963,6 +1046,40 @@ function openAutofix(item) {
   agentStore.openIncidentChat(item.id);
 }
 
+// --- Fix Commands ---
+const fixCommandsDialogOpen = ref(false);
+const fixCommandsData = ref(null);
+const fixCommandsError = ref(null);
+const fixCommandsLoading = ref(null);
+
+function isFailedSubgraphRule(ruleId) {
+  const rule = store.rules.find((r) => r.id === ruleId);
+  return rule?.type === 'failed_subgraph';
+}
+
+async function openFixCommands(item) {
+  fixCommandsLoading.value = item.id;
+  fixCommandsData.value = null;
+  fixCommandsError.value = null;
+  fixCommandsDialogOpen.value = true;
+  try {
+    fixCommandsData.value = await store.fetchFixCommands(item.id);
+  } catch (err) {
+    fixCommandsError.value = err.message || 'Failed to fetch fix commands';
+  } finally {
+    fixCommandsLoading.value = null;
+  }
+}
+
+function copyScript() {
+  if (!fixCommandsData.value?.script) return;
+  navigator.clipboard.writeText(fixCommandsData.value.script).then(() => {
+    showSnackbar('Script copied to clipboard', 'success');
+  }).catch(() => {
+    showSnackbar('Failed to copy — select and copy manually', 'error');
+  });
+}
+
 // --- Tab change: load data for active tab ---
 watch(tab, (newTab) => {
   if (newTab === 'incidents') {
@@ -985,3 +1102,18 @@ onMounted(async () => {
 });
 </script>
 
+<style scoped>
+.fix-script-block {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 16px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-family: 'Fira Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre;
+  max-height: 500px;
+  overflow-y: auto;
+}
+</style>

@@ -15,13 +15,36 @@ The Graph is a decentralized indexing protocol for querying blockchain data. Key
 - **APR (Annual Percentage Rate)** — Estimated annualized return on allocated stake, calculated from signal proportion, issuance rate, and staked tokens.
 - **Denied subgraphs** — Some subgraphs are denied rewards by the council; allocating to these earns no indexing rewards.
 
+## Common Issues & Resolution
+
+### Stale Failed Subgraphs
+A **stale failure** occurs when a subgraph deployment's health status is "failed" but it has actually synced to the chain head. This happens when a graph-node encounters a transient error (RPC timeout, data corruption, etc.) and marks the deployment as failed, even though the data is up to date.
+
+**How to detect:** Use \`checkSubgraphHealth\` — if \`isStale\` is true, the deployment has a stale failure (health=failed but all chains synced).
+
+**How to fix:** Use \`graphman rewind\` to rewind the deployment to a block slightly before the chain head. This clears the failed status and allows the deployment to resume syncing normally.
+
+**Resolution workflow:**
+1. Call \`checkSubgraphHealth\` with the deployment hash to confirm it's a stale failure
+2. From the health data, note the chain ID and the latest indexed block number
+3. Calculate the rewind target: subtract 1 block from the latest indexed block (stale failures only need a 1-block rewind to clear the error)
+4. Call \`proposeGraphmanRewind\` with the deployment hash, target block number, and chain ID
+5. Wait for user approval, then execute with \`executeGraphmanRewind\`
+
+### Behind Chain Head
+A deployment is **behind chain head** when it's healthy but significantly behind the latest block on the chain. This is usually temporary (the node is catching up) but persistent lag may indicate resource issues.
+
+### Failed Subgraphs (non-stale)
+If a deployment is failed and NOT synced (\`isStale\` is false), it likely has a genuine fatal error (deterministic failure, bad mapping code, etc.). These cannot be fixed by rewind — the subgraph author needs to publish a fix.
+
 ## Guidelines
-- Use tools to query real data before answering questions about indexer state.
+- Always use tools to query real data before answering. Start by investigating with \`checkSubgraphHealth\` and \`getSubgraphAllocation\`.
 - When analyzing allocations, consider APR, daily rewards, signal strength, and deployment health.
 - Always explain your reasoning and show relevant numbers.
 - Never execute actions without explicit user confirmation. Propose changes and wait for approval.
 - Present GRT amounts in human-readable format (not wei).
-- When comparing allocations, consider both absolute rewards and APR efficiency.`;
+- When comparing allocations, consider both absolute rewards and APR efficiency.
+- When investigating incidents, be proactive: use the available tools immediately rather than asking the user for information you can look up yourself.`;
 
 const MAX_TOOL_ITERATIONS = 10;
 
@@ -55,21 +78,28 @@ export class AgentOrchestrator {
       iterations++;
 
       const messages = this.conversations.get(id) ?? [];
+      console.log(`Agent: iteration ${iterations}, sending ${messages.length} messages to LLM`);
       const response = await this.provider.chat(messages, this.toolDefinitions, INDEXER_SYSTEM_PROMPT);
 
       if (!response.toolCalls || response.toolCalls.length === 0) {
         // Final response — no more tool calls
         const finalContent = response.content;
         this.conversations.append(id, { role: 'assistant', content: finalContent });
+        console.log(`Agent: final response (${finalContent.length} chars)`);
         return { response: finalContent, conversationId: id };
       }
 
       // There are tool calls to process.
-      // First, record the assistant message (may have partial content alongside tool calls)
-      // We store the content so the conversation includes any reasoning text.
-      if (response.content) {
-        this.conversations.append(id, { role: 'assistant', content: response.content });
-      }
+      console.log(`Agent: ${response.toolCalls.length} tool call(s): ${response.toolCalls.map((t) => t.name).join(', ')}`);
+
+      // Store the assistant message with tool calls so the conversation history
+      // is valid when replayed to the provider (OpenAI requires tool_calls on the
+      // assistant message that precedes tool result messages).
+      this.conversations.append(id, {
+        role: 'assistant',
+        content: response.content || '',
+        toolCalls: response.toolCalls,
+      });
 
       // Execute each tool call and add results
       for (const toolCall of response.toolCalls) {
@@ -78,14 +108,18 @@ export class AgentOrchestrator {
 
         if (!tool) {
           resultContent = JSON.stringify({ error: `Unknown tool: ${toolCall.name}` });
+          console.log(`Agent: tool ${toolCall.name} not found`);
         } else {
           try {
+            console.log(`Agent: executing ${toolCall.name}(${JSON.stringify(toolCall.arguments).substring(0, 150)})`);
             const result = await tool.execute(toolCall.arguments);
             resultContent = JSON.stringify(result);
+            console.log(`Agent: ${toolCall.name} completed (${resultContent.length} chars): ${resultContent.substring(0, 200)}`);
           } catch (err: any) {
             resultContent = JSON.stringify({
               error: err.message ?? 'Tool execution failed',
             });
+            console.error(`Agent: ${toolCall.name} failed: ${err.message}`);
           }
         }
 

@@ -159,7 +159,7 @@ export class ChainRpcService {
         method,
         params,
       }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!response.ok) {

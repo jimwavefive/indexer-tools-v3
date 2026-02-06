@@ -255,6 +255,17 @@ export const useNotificationRulesStore = defineStore('notificationRules', {
       }
     },
 
+    async fetchFixCommands(incidentId) {
+      try {
+        const res = await fetch(`${BASE_URL}/api/notifications/incidents/${incidentId}/fix-commands`);
+        if (!res.ok) throw new Error(`Failed to fetch fix commands: ${res.statusText}`);
+        return await res.json();
+      } catch (err) {
+        console.error('[notificationRules] fetchFixCommands error:', err);
+        throw err;
+      }
+    },
+
     // --- Settings ---
     async fetchSettings() {
       try {

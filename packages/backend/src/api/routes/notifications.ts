@@ -5,6 +5,7 @@ import { SqliteStore } from '../../db/sqliteStore.js';
 import type { RuleConfig } from '../../services/notifications/rules/Rule.js';
 import type { ChannelConfig } from '../../services/notifications/channels/Channel.js';
 import type { PollingScheduler } from '../../services/poller/scheduler.js';
+import { getChainRpcService } from '../../services/rpc/ChainRpcService.js';
 
 /** Validate that a webhook URL is safe to fetch (SSRF protection). */
 function isAllowedWebhookUrl(urlStr: string): { ok: boolean; reason?: string } {
@@ -397,6 +398,205 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
     } catch (err) {
       console.error('Failed to resolve incident:', err);
       res.status(500).json({ error: 'Failed to resolve incident' });
+    }
+  });
+
+  // --- Fix Commands (manual graphman rewind for stale failures) ---
+
+  router.get('/api/notifications/incidents/:id/fix-commands', async (req: Request, res: Response) => {
+    try {
+      const incident = store.getIncidentById(req.params.id);
+      if (!incident) {
+        res.status(404).json({ error: 'Incident not found' });
+        return;
+      }
+
+      const metadata = incident.latest_metadata as Record<string, unknown>;
+      const subgraphs = (metadata?.subgraphs as Array<{ deploymentHash: string; name: string; allocatedGRT: string; errorMessage?: string }>) || [];
+
+      if (subgraphs.length === 0) {
+        res.json({ staleDeployments: [], genuineFailures: [], commands: [], containerName: '' });
+        return;
+      }
+
+      // Fetch fresh deployment statuses directly from graph-node (not cache)
+      const hashes = subgraphs.map((sg) => sg.deploymentHash).filter(Boolean);
+      let statuses: Map<string, any>;
+      try {
+        if (!scheduler) {
+          throw new Error('Scheduler not initialized');
+        }
+        statuses = await scheduler.fetchFreshDeploymentStatuses(hashes);
+      } catch (err: any) {
+        console.error('Failed to fetch fresh deployment statuses:', err.message);
+        res.status(503).json({ error: `Failed to fetch deployment statuses from graph-node: ${err.message}` });
+        return;
+      }
+
+      const staleDeployments: Array<{ hash: string; name: string; chainId: string; chainNetwork: string; latestBlock: number; error: string; allocatedGRT: string }> = [];
+      const genuineFailures: Array<{ hash: string; name: string; error: string; allocatedGRT: string }> = [];
+      const unknownDeployments: Array<{ hash: string; name: string; allocatedGRT: string }> = [];
+
+      for (const sg of subgraphs) {
+        const hash = sg.deploymentHash;
+        if (!hash) continue;
+
+        const status = statuses.get(hash);
+        if (!status) {
+          unknownDeployments.push({ hash, name: sg.name || hash.substring(0, 12), allocatedGRT: sg.allocatedGRT });
+          continue;
+        }
+
+        const allSynced = status.chains.every((c) => {
+          const chainhead = parseInt(c.chainHeadBlock?.number || '0', 10);
+          const latest = parseInt(c.latestBlock?.number || '0', 10);
+          return (chainhead - latest) < 100;
+        });
+
+        if (status.health === 'failed' && allSynced) {
+          const primaryChain = status.chains[0];
+          const network = primaryChain?.network || 'unknown';
+          const chainId = network === 'mainnet' ? '1'
+            : network === 'arbitrum-one' ? '42161'
+            : network === 'gnosis' ? '100'
+            : network === 'base' ? '8453'
+            : network === 'matic' ? '137'
+            : network === 'optimism' ? '10'
+            : network === 'avalanche' ? '43114'
+            : network === 'celo' ? '42220'
+            : network;
+          const latestBlock = parseInt(primaryChain?.latestBlock?.number || '0', 10);
+
+          staleDeployments.push({
+            hash,
+            name: sg.name || hash.substring(0, 12),
+            chainId,
+            chainNetwork: network,
+            latestBlock,
+            error: status.fatalError?.message?.substring(0, 200) || 'unknown error',
+            allocatedGRT: sg.allocatedGRT,
+          });
+        } else {
+          genuineFailures.push({
+            hash,
+            name: sg.name || hash.substring(0, 12),
+            error: status.fatalError?.message?.substring(0, 200) || (status.health === 'failed' ? 'failed (not synced)' : `health: ${status.health}`),
+            allocatedGRT: sg.allocatedGRT,
+          });
+        }
+      }
+
+      // Generate graphman rewind commands for stale deployments
+      const containerName = process.env.GRAPHMAN_CONTAINER_NAME || 'index-node-mgmt-0';
+      const rpcService = getChainRpcService();
+
+      // Resolve RPC URLs for each chain used
+      const chainRpcUrls = new Map<string, string>();
+      for (const d of staleDeployments) {
+        if (!chainRpcUrls.has(d.chainId)) {
+          const url = rpcService.getRpcUrl(d.chainId);
+          chainRpcUrls.set(d.chainId, url || `<RPC_URL_FOR_CHAIN_${d.chainId}>`);
+        }
+      }
+
+      // graphman CLI syntax: graphman --config <CONFIG> rewind --block-hash <HASH> --block-number <NUM> <DEPLOYMENT>
+      const commands = staleDeployments.map((d) => {
+        const rewindBlock = d.latestBlock - 1;
+        const blockHex = `0x${rewindBlock.toString(16)}`;
+        const rpcUrl = chainRpcUrls.get(d.chainId) || `<RPC_URL_FOR_CHAIN_${d.chainId}>`;
+        return {
+          deploymentHash: d.hash,
+          name: d.name,
+          blockNumber: rewindBlock,
+          chainId: d.chainId,
+          chainNetwork: d.chainNetwork,
+          command: `docker exec ${containerName} graphman rewind --block-hash <BLOCK_HASH> --block-number ${rewindBlock} ${d.hash}`,
+          hashLookup: `curl -s -X POST ${rpcUrl} -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["${blockHex}",false],"id":1}' | jq -r '.result.hash'`,
+        };
+      });
+
+      // Generate a complete bash script that handles everything
+      let script = `#!/bin/bash\n# Auto-generated graphman rewind script for stale failures\n# Generated: ${new Date().toISOString()}\n# Incident: ${incident.id}\n#\n# ${staleDeployments.length} stale deployment(s) to rewind\n# ${genuineFailures.length} genuine failure(s) (not fixable by rewind)\n\nCONTAINER="${containerName}"\nSUCCESS=0\nFAILED=0\nFAILED_LIST=""\n`;
+
+      script += `\nget_block_hash() {
+  local rpc_url="$1"
+  local block_hex="$2"
+  local hash
+  hash=$(curl -sf -X POST "$rpc_url" \\
+    -H 'Content-Type: application/json' \\
+    -d "{\\"jsonrpc\\":\\"2.0\\",\\"method\\":\\"eth_getBlockByNumber\\",\\"params\\":[\\"$block_hex\\",false],\\"id\\":1}" \\
+    | jq -r '.result.hash')
+  if [ -z "$hash" ] || [ "$hash" = "null" ]; then
+    echo "ERROR: Failed to fetch block hash" >&2
+    return 1
+  fi
+  echo "$hash"
+}
+
+do_rewind() {
+  local rpc_url="$1"
+  local block_num="$2"
+  local deployment="$3"
+  local block_hex
+  block_hex=$(printf '0x%x' "$block_num")
+  local bh
+  bh=$(get_block_hash "$rpc_url" "$block_hex") || return 1
+  local output
+  output=$(docker exec "$CONTAINER" graphman rewind --block-hash "$bh" --block-number "$block_num" "$deployment" 2>&1)
+  local rc=$?
+  echo "$output"
+  if [ $rc -eq 0 ]; then
+    return 0
+  fi
+  # If graphman suggests a safe block, retry with that
+  local safe_block
+  safe_block=$(echo "$output" | grep -oP 'safely rewind to block number \\K[0-9]+')
+  if [ -n "$safe_block" ]; then
+    echo "  Retrying with safe block $safe_block..."
+    local safe_hex
+    safe_hex=$(printf '0x%x' "$safe_block")
+    local safe_bh
+    safe_bh=$(get_block_hash "$rpc_url" "$safe_hex") || return 1
+    docker exec "$CONTAINER" graphman rewind --block-hash "$safe_bh" --block-number "$safe_block" "$deployment" 2>&1
+    return $?
+  fi
+  return $rc
+}
+`;
+
+      // Group by chain for efficiency
+      const byChain = new Map<string, typeof staleDeployments>();
+      for (const d of staleDeployments) {
+        const key = d.chainId;
+        if (!byChain.has(key)) byChain.set(key, []);
+        byChain.get(key)!.push(d);
+      }
+
+      for (const [chainId, deployments] of byChain) {
+        const network = deployments[0].chainNetwork;
+        const rpcUrl = chainRpcUrls.get(chainId) || `<RPC_URL_FOR_CHAIN_${chainId}>`;
+        script += `\n# --- Chain: ${network} (${chainId}) - ${deployments.length} deployment(s) ---\n`;
+
+        for (const d of deployments) {
+          const rewindBlock = d.latestBlock - 1;
+          script += `\n# ${d.name}\necho "Rewinding ${d.hash.substring(0, 12)}... (${d.name}) to block ${rewindBlock}"\nif do_rewind "${rpcUrl}" ${rewindBlock} ${d.hash}; then\n  echo "  Done."\n  SUCCESS=$((SUCCESS + 1))\nelse\n  echo "  FAILED"\n  FAILED=$((FAILED + 1))\n  FAILED_LIST="$FAILED_LIST\\n  - ${d.name} (${d.hash.substring(0, 16)}...)"\nfi\n`;
+        }
+      }
+
+      script += '\necho ""\necho "========================================"\necho "Results: $SUCCESS succeeded, $FAILED failed"\nif [ $FAILED -gt 0 ]; then\n  echo -e "\\nFailed deployments:$FAILED_LIST"\nfi\n';
+
+      res.json({
+        staleDeployments,
+        genuineFailures,
+        unknownDeployments,
+        commands,
+        script,
+        containerName,
+        totalFailed: subgraphs.length,
+      });
+    } catch (err) {
+      console.error('Failed to generate fix commands:', err);
+      res.status(500).json({ error: 'Failed to generate fix commands' });
     }
   });
 
