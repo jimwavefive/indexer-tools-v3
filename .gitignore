@@ -28,4 +28,9 @@ CLAUDE.md
 AGENTS.md
 .claude/
 
+# Playwright MCP
+.playwright-mcp/
+wizard-*.png
+wizard-*.md
+
 # pnpm — lock file should be committed for reproducible builds
