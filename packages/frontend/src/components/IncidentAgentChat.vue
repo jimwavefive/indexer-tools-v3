@@ -2,6 +2,7 @@
   <v-card
     v-if="agentStore.incidentChatOpen"
     class="incident-chat-container"
+    :class="{ expanded }"
     elevation="12"
   >
     <!-- Header -->
@@ -9,6 +10,14 @@
       <v-icon start size="small">mdi-robot</v-icon>
       <span class="text-body-2 font-weight-bold">AI Autofix</span>
       <v-spacer></v-spacer>
+      <v-btn icon size="x-small" variant="text" color="white" @click="resetChat" :disabled="conversation.messages.length === 0">
+        <v-icon>mdi-refresh</v-icon>
+        <v-tooltip activator="parent" location="bottom">New chat</v-tooltip>
+      </v-btn>
+      <v-btn icon size="x-small" variant="text" color="white" @click="expanded = !expanded">
+        <v-icon>{{ expanded ? 'mdi-arrow-collapse' : 'mdi-arrow-expand' }}</v-icon>
+        <v-tooltip activator="parent" location="bottom">{{ expanded ? 'Collapse' : 'Expand' }}</v-tooltip>
+      </v-btn>
       <v-btn icon size="x-small" variant="text" color="white" @click="minimize">
         <v-icon>mdi-minus</v-icon>
       </v-btn>
@@ -125,6 +134,7 @@ const agentStore = useAgentStore()
 
 const inputMessage = ref('')
 const minimized = ref(false)
+const expanded = ref(false)
 const messagesContainer = ref(null)
 
 const conversation = computed(() => {
@@ -162,6 +172,12 @@ function reject() {
     agentStore.activeIncidentId,
     conversation.value.pendingApproval.id
   )
+}
+
+function resetChat() {
+  if (agentStore.activeIncidentId) {
+    agentStore.resetIncidentConversation(agentStore.activeIncidentId)
+  }
 }
 
 function minimize() {
@@ -202,6 +218,12 @@ watch(
   display: flex;
   flex-direction: column;
   max-height: 500px;
+  transition: all 0.2s ease;
+}
+
+.incident-chat-container.expanded {
+  width: 700px;
+  max-height: calc(100vh - 32px);
 }
 
 .incident-chat-minimized {
@@ -218,6 +240,10 @@ watch(
   min-height: 150px;
 }
 
+.expanded .messages-container {
+  max-height: calc(100vh - 180px);
+}
+
 .message-bubble {
   padding: 8px 12px;
   border-radius: 8px;
@@ -225,25 +251,25 @@ watch(
 }
 
 .user-message {
-  background: #e3f2fd;
+  background: rgba(var(--v-theme-primary), 0.15);
   margin-left: auto;
 }
 
 .assistant-message {
-  background: #f5f5f5;
+  background: rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .system-message {
-  background: #fff3e0;
+  background: rgba(var(--v-theme-warning), 0.15);
   font-style: italic;
 }
 
 .error-message {
-  background: #ffebee;
+  background: rgba(var(--v-theme-error), 0.15);
 }
 
 .message-role {
-  color: #666;
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
 .message-content :deep(p) {
@@ -255,7 +281,7 @@ watch(
 }
 
 .message-content :deep(code) {
-  background: #e8e8e8;
+  background: rgba(var(--v-theme-on-surface), 0.1);
   padding: 2px 4px;
   border-radius: 3px;
   font-size: 0.85em;
@@ -271,7 +297,7 @@ watch(
 }
 
 .approval-actions {
-  border-top: 1px solid #e0e0e0;
-  background: #fafafa;
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: rgba(var(--v-theme-surface-variant), 0.3);
 }
 </style>

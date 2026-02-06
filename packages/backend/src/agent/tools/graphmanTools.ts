@@ -85,32 +85,12 @@ The actual rewind will only execute after user approval via executeGraphmanRewin
       };
     }
 
-    // Fetch block hash from chain RPC
-    const rpcService = getChainRpcService();
-    let blockHash: string;
-
-    try {
-      const block = await rpcService.getBlockByNumber(args.chainId, args.blockNumber);
-      if (!block) {
-        return {
-          error: `Block ${args.blockNumber} not found on chain ${args.chainId}`,
-          approvalRequired: false,
-        };
-      }
-      blockHash = block.hash;
-    } catch (err: any) {
-      return {
-        error: `Failed to fetch block hash: ${err.message}`,
-        approvalRequired: false,
-      };
-    }
-
-    // Create approval request
+    // Create approval request (block hash will be fetched at execution time)
     const approvalId = uuidv4();
     const actionArgs = {
       deploymentHash: args.deploymentHash,
       blockNumber: args.blockNumber,
-      blockHash,
+      blockHash: null as string | null, // deferred to execution
       chainId: args.chainId,
       reason: args.reason,
     };
@@ -144,7 +124,6 @@ The actual rewind will only execute after user approval via executeGraphmanRewin
         action: 'graphman_rewind',
         deploymentHash: args.deploymentHash,
         blockNumber: args.blockNumber,
-        blockHash,
         chainId: args.chainId,
         reason: args.reason,
         dryRunMode: isDryRun,
@@ -152,7 +131,6 @@ The actual rewind will only execute after user approval via executeGraphmanRewin
       message: `I've prepared a graphman rewind operation. Please review and approve:\n\n` +
         `- **Deployment**: ${args.deploymentHash}\n` +
         `- **Rewind to block**: ${args.blockNumber}\n` +
-        `- **Block hash**: ${blockHash}\n` +
         `- **Chain**: ${args.chainId}\n` +
         `- **Reason**: ${args.reason}\n` +
         (isDryRun ? '\n**Note**: Running in DRY RUN mode — command will be logged but not executed.' : '') +
@@ -208,17 +186,38 @@ The approval ID must be provided to verify that the user has consented to the op
     const actionArgs = approval.action_args as {
       deploymentHash: string;
       blockNumber: number;
-      blockHash: string;
+      blockHash: string | null;
       chainId: string;
       reason: string;
     };
+
+    // Fetch block hash now if it was deferred from proposal time
+    let blockHash = actionArgs.blockHash;
+    if (!blockHash) {
+      const rpcService = getChainRpcService();
+      try {
+        const block = await rpcService.getBlockByNumber(actionArgs.chainId, actionArgs.blockNumber);
+        if (!block) {
+          return {
+            success: false,
+            error: `Block ${actionArgs.blockNumber} not found on chain ${actionArgs.chainId}`,
+          };
+        }
+        blockHash = block.hash;
+      } catch (err: any) {
+        return {
+          success: false,
+          error: `Failed to fetch block hash: ${err.message}`,
+        };
+      }
+    }
 
     // Execute the rewind
     const executor = getGraphmanExecutor();
     const result = await executor.rewind(
       actionArgs.deploymentHash,
       actionArgs.blockNumber,
-      actionArgs.blockHash,
+      blockHash,
     );
 
     // Update approval status

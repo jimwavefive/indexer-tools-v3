@@ -327,6 +327,23 @@ export const useAgentStore = defineStore('agent', {
       }
     },
 
+    async resetIncidentConversation(incidentId) {
+      try {
+        await fetch(`${API_BASE}/api/agent/incident/${incidentId}/conversation`, {
+          method: 'DELETE',
+        })
+      } catch (err) {
+        console.error('Failed to reset incident conversation:', err)
+      }
+      // Clear local state
+      this.incidentConversations[incidentId] = {
+        conversationId: null,
+        messages: [],
+        pendingApproval: null,
+        loading: false,
+      }
+    },
+
     getIncidentConversation(incidentId) {
       return this.incidentConversations[incidentId] || {
         conversationId: null,

@@ -83,4 +83,12 @@ export class PollingScheduler {
   get latestDeploymentStatuses(): Map<string, DeploymentStatus> | undefined {
     return this.ruleScheduler.latestDeploymentStatuses;
   }
+
+  /**
+   * Fetch fresh deployment statuses directly from the graph-node.
+   * Bypasses the cache — used for on-demand queries like fix commands.
+   */
+  async fetchFreshDeploymentStatuses(hashes: string[]): Promise<Map<string, DeploymentStatus>> {
+    return this.ruleScheduler.fetchFreshDeploymentStatuses(hashes);
+  }
 }

@@ -8,6 +8,7 @@ export interface ChatMessage {
   content: string;
   toolCallId?: string;
   toolName?: string;
+  toolCalls?: ToolCall[];
 }
 
 export interface ToolCall {
@@ -67,13 +68,20 @@ export class ClaudeProvider implements AIProvider {
         };
       }
 
-      if (msg.role === 'assistant' && msg.toolCallId) {
-        // Assistant message with a tool use block — shouldn't normally happen in our flow,
-        // but handle gracefully
-        return {
-          role: 'assistant' as const,
-          content: msg.content,
-        };
+      if (msg.role === 'assistant' && msg.toolCalls && msg.toolCalls.length > 0) {
+        const content: Array<Anthropic.TextBlockParam | Anthropic.ToolUseBlockParam> = [];
+        if (msg.content) {
+          content.push({ type: 'text' as const, text: msg.content });
+        }
+        for (const tc of msg.toolCalls) {
+          content.push({
+            type: 'tool_use' as const,
+            id: tc.id,
+            name: tc.name,
+            input: tc.arguments,
+          });
+        }
+        return { role: 'assistant' as const, content };
       }
 
       return {
@@ -146,10 +154,25 @@ export class OpenAIProvider implements AIProvider {
           content: msg.content,
         });
       } else if (msg.role === 'assistant') {
-        openaiMessages.push({
-          role: 'assistant',
-          content: msg.content,
-        });
+        if (msg.toolCalls && msg.toolCalls.length > 0) {
+          openaiMessages.push({
+            role: 'assistant',
+            content: msg.content || null,
+            tool_calls: msg.toolCalls.map((tc) => ({
+              id: tc.id,
+              type: 'function' as const,
+              function: {
+                name: tc.name,
+                arguments: JSON.stringify(tc.arguments),
+              },
+            })),
+          });
+        } else {
+          openaiMessages.push({
+            role: 'assistant',
+            content: msg.content,
+          });
+        }
       } else {
         openaiMessages.push({
           role: 'user',

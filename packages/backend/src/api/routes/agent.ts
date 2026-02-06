@@ -10,9 +10,11 @@ const router = Router();
 
 let orchestrator: AgentOrchestrator | null = null;
 let storeRef: SqliteStore | null = null;
+let schedulerRef: PollingScheduler | null = null;
 
 export function initializeAgentRoutes(store: SqliteStore, scheduler?: PollingScheduler): void {
   storeRef = store;
+  schedulerRef = scheduler || null;
   setIncidentStoreRef(store);
   setGraphmanStoreRef(store);
   if (scheduler) {
@@ -47,8 +49,10 @@ router.post('/chat', async (req: Request, res: Response) => {
   }
 
   try {
+    console.log(`Agent chat: message="${message.substring(0, 80)}..." conversationId=${conversationId || 'new'}`);
     const agent = getOrchestrator();
     const result = await agent.chat(message, conversationId);
+    console.log(`Agent chat: responded (${result.response.length} chars)`);
     res.json({
       response: result.response,
       conversationId: result.conversationId,
@@ -122,6 +126,7 @@ router.post('/incident/:id/chat', async (req: Request, res: Response) => {
     }
 
     // Find existing active conversation for this incident, or create new one
+    const agent = getOrchestrator();
     let conversation = storeRef.getConversationByIncident(incidentId);
     let conversationId: string;
     let isNewConversation = false;
@@ -132,6 +137,15 @@ router.post('/incident/:id/chat', async (req: Request, res: Response) => {
       isNewConversation = true;
     } else {
       conversationId = conversation.id;
+      // Detect stale conversation: SQLite has it but in-memory orchestrator lost it (e.g. after restart)
+      if (!agent.getConversationStore().has(conversationId)) {
+        // Wipe the old SQLite conversation and start fresh
+        storeRef.deleteConversation(conversationId);
+        conversationId = uuidv4();
+        storeRef.createConversation(conversationId, incidentId);
+        isNewConversation = true;
+        console.log(`Incident chat: stale conversation detected, starting fresh for incident ${incidentId}`);
+      }
     }
 
     // Build incident context for the first message
@@ -139,14 +153,18 @@ router.post('/incident/:id/chat', async (req: Request, res: Response) => {
     if (isNewConversation) {
       const incidentContext = buildIncidentContext(incident);
       fullMessage = `${incidentContext}\n\nUser request: ${message}`;
+      console.log(`Incident chat: new conversation ${conversationId} for incident ${incidentId}`);
+    } else {
+      console.log(`Incident chat: continuing conversation ${conversationId} for incident ${incidentId}`);
     }
 
     // Set graphman context so tools can create approvals
     setGraphmanContext(conversationId, incidentId);
 
     // Chat with the agent
-    const agent = getOrchestrator();
+    console.log(`Incident chat: sending to LLM (message length: ${fullMessage.length})`);
     const result = await agent.chat(fullMessage, conversationId);
+    console.log(`Incident chat: LLM responded (response length: ${result.response.length})`);
 
     // Persist messages to SQLite
     storeRef.appendConversationMessage(conversationId, {
@@ -225,6 +243,37 @@ router.get('/incident/:id/conversation', (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Get incident conversation error:', err);
     res.status(500).json({ error: 'Failed to get conversation.' });
+  }
+});
+
+// DELETE /api/agent/incident/:id/conversation - Reset the conversation for an incident
+router.delete('/incident/:id/conversation', (req: Request, res: Response) => {
+  if (!isAgentEnabled()) {
+    res.status(403).json({ error: 'Agent feature is not enabled.' });
+    return;
+  }
+
+  if (!storeRef) {
+    res.status(500).json({ error: 'Store not initialized.' });
+    return;
+  }
+
+  const incidentId = req.params.id;
+
+  try {
+    const conversation = storeRef.getConversationByIncident(incidentId);
+    if (conversation) {
+      // Clear from in-memory orchestrator
+      const agent = getOrchestrator();
+      agent.getConversationStore().clear(conversation.id);
+      // Delete from SQLite
+      storeRef.deleteConversation(conversation.id);
+      console.log(`Incident chat: conversation reset for incident ${incidentId}`);
+    }
+    res.json({ deleted: true, incidentId });
+  } catch (err: any) {
+    console.error('Delete incident conversation error:', err);
+    res.status(500).json({ error: 'Failed to delete conversation.' });
   }
 });
 
@@ -408,9 +457,102 @@ ${incident.latest_message}
 
 **Metadata:**
 ${JSON.stringify(metadata, null, 2)}
-
-Use the available tools to investigate this incident and propose solutions. If the incident is about a failed subgraph, you can use checkSubgraphHealth and getSubgraphAllocation to gather more information. If you determine that a graphman rewind is needed, propose it using proposeGraphmanRewind.
 `;
+
+  // Add rule-type-specific instructions
+  if (incident.rule_id === 'failed-subgraph') {
+    const subgraphs = metadata.subgraphs || [];
+
+    // Pre-classify deployments using cached status data from the poller
+    const staleDeployments: Array<{ hash: string; name: string; chainId: string; latestBlock: number; error: string }> = [];
+    const genuineFailures: Array<{ hash: string; name: string; error: string }> = [];
+    const unknownDeployments: string[] = [];
+
+    const statuses = schedulerRef?.latestDeploymentStatuses;
+
+    for (const sg of subgraphs) {
+      const hash = sg.deploymentHash;
+      if (!hash) continue;
+
+      if (!statuses) {
+        unknownDeployments.push(hash);
+        continue;
+      }
+
+      const status = statuses.get(hash);
+      if (!status) {
+        unknownDeployments.push(hash);
+        continue;
+      }
+
+      const allSynced = status.chains.every((c: any) => {
+        const chainhead = parseInt(c.chainHeadBlock?.number || '0', 10);
+        const latest = parseInt(c.latestBlock?.number || '0', 10);
+        return (chainhead - latest) < 100;
+      });
+
+      if (status.health === 'failed' && allSynced) {
+        // Find chain info for the rewind
+        const primaryChain = status.chains[0];
+        const chainId = primaryChain?.network === 'mainnet' ? '1'
+          : primaryChain?.network === 'arbitrum-one' ? '42161'
+          : primaryChain?.network === 'gnosis' ? '100'
+          : primaryChain?.network === 'base' ? '8453'
+          : primaryChain?.network || 'unknown';
+        const latestBlock = parseInt(primaryChain?.latestBlock?.number || '0', 10);
+
+        staleDeployments.push({
+          hash,
+          name: sg.name || hash.substring(0, 12),
+          chainId,
+          latestBlock,
+          error: status.fatalError?.message?.substring(0, 100) || 'unknown',
+        });
+      } else {
+        genuineFailures.push({
+          hash,
+          name: sg.name || hash.substring(0, 12),
+          error: status.fatalError?.message?.substring(0, 150) || 'unknown',
+        });
+      }
+    }
+
+    context += `
+## Pre-classified Deployment Status
+The system has already checked all ${subgraphs.length} failed deployments against cached health data.
+
+### Stale Failures (fixable with rewind): ${staleDeployments.length}
+These deployments are marked "failed" but are synced to chainhead — a 1-block rewind will clear the error.
+${staleDeployments.length > 0 ? staleDeployments.map((d) =>
+  `- **${d.name}** \`${d.hash}\` — chain: ${d.chainId}, rewind to block: ${d.latestBlock - 1}, error: ${d.error}`
+).join('\n') : 'None found.'}
+
+### Genuine Failures (not fixable with rewind): ${genuineFailures.length}
+These deployments are failed and NOT synced — they have real errors that need subgraph code fixes.
+${genuineFailures.length > 0 ? genuineFailures.map((d) =>
+  `- **${d.name}** \`${d.hash}\` — error: ${d.error}`
+).join('\n') : 'None found.'}
+${unknownDeployments.length > 0 ? `\n### Unknown status: ${unknownDeployments.length}\nUse \`checkSubgraphHealth\` to investigate: ${unknownDeployments.join(', ')}` : ''}
+
+## Instructions
+${staleDeployments.length > 0 ? `Propose \`proposeGraphmanRewind\` for ALL ${staleDeployments.length} stale deployments listed above. Use the chain ID and rewind block number provided. Do NOT skip any — process every single one.` : 'Report the genuine failure details to the user.'}
+`;
+  } else if (incident.rule_id === 'behind-chainhead') {
+    context += `
+## Investigation Instructions
+This is a **behind chainhead** incident. The deployment is healthy but lagging behind the chain head.
+
+**Steps:**
+1. Call \`checkSubgraphHealth\` to see how far behind each chain is
+2. Report the lag in blocks and estimate sync time
+3. If the deployment is also failed, check if it's a stale failure
+`;
+  } else {
+    context += `
+## Investigation Instructions
+Use the available tools to investigate this incident. Start by checking deployment health with \`checkSubgraphHealth\` and allocation details with \`getSubgraphAllocation\` if relevant.
+`;
+  }
 
   return context;
 }

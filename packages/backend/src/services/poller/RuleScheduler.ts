@@ -426,4 +426,16 @@ export class RuleScheduler {
   get latestDeploymentStatuses(): Map<string, DeploymentStatus> | undefined {
     return this.dataCache?.deploymentStatuses;
   }
+
+  /**
+   * Fetch fresh deployment statuses directly from the graph-node status endpoint.
+   * Bypasses the cache entirely — used for on-demand queries like fix commands.
+   */
+  async fetchFreshDeploymentStatuses(hashes: string[]): Promise<Map<string, DeploymentStatus>> {
+    const statusEndpoint = await this.resolveStatusEndpoint();
+    if (!statusEndpoint) {
+      throw new Error('No status endpoint available');
+    }
+    return this.poller.fetchDeploymentStatuses(statusEndpoint, hashes);
+  }
 }
