@@ -128,7 +128,7 @@
 
           <v-slider
               min="0"
-              :max="parseInt(fromWei(toBN(newAllocationSetterStore.calculatedAvailableStake))) + parseFloat(newAllocations[item.deployment.ipfsHash])"
+              :max="Math.max(0, parseInt(fromWei(toBN(newAllocationSetterStore.calculatedAvailableStake))) + parseFloat(newAllocations[item.deployment.ipfsHash]))"
               :model-value="pendingAllocations[item.deployment.ipfsHash] != null ? pendingAllocations[item.deployment.ipfsHash] : newAllocations[item.deployment.ipfsHash]"
               @update:model-value="onSliderUpdate(item.deployment.ipfsHash, $event)"
               style="max-width: 500px; min-width:100px;"

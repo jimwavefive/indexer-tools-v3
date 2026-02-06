@@ -296,6 +296,9 @@
     if (apr.isGreaterThan(0)) {
       subgraphSettingStore.settings.targetApr = apr.toFixed(10);
       newAllocationSetterStore.setAllMaxAllos();
+    } else if (autoTargetApr.value) {
+      // APR is 0 — not enough stake to allocate. Reset to avoid stale values.
+      newAllocationSetterStore.resetAllos();
     }
   }
 

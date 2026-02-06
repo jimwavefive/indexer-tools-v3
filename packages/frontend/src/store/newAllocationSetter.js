@@ -4,7 +4,7 @@ import { useNetworkStore } from './network';
 import { useAccountStore } from './accounts';
 import { useAllocationStore } from './allocations';
 import BigNumber from 'bignumber.js';
-import { toWei } from '@/plugins/web3Utils';
+import { toWei, fromWei } from '@/plugins/web3Utils';
 import { calculateNewApr, calculateSubgraphDailyRewards, maxAllo, indexerCut, calculateAutoTargetApr } from '@/plugins/commonCalcs';
 import { useChainStore } from './chains';
 const subgraphStore = useSubgraphsStore();
@@ -232,7 +232,7 @@ export const useNewAllocationSetterStore = defineStore('allocationSetter', {
             customPOI = `${state.customPOIs[allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash]} true ${state.customBlockHeights[allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash]} ${state.customPublicPOIs[allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash]} `;
           }
         }
-        if(subgraphStore.selected.includes(allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash)){
+        if(subgraphStore.selected.includes(allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash) && (state.newAllocations[allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash] || 0) > 0){
           if(BigNumber(allocationStore.getSelectedAllocations[i].allocatedTokens).dividedBy(10**18).gt(BigNumber(state.newAllocations[allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash]))){
             reallocate += `graph indexer actions queue reallocate ${allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash} ${allocationStore.getSelectedAllocations[i].id} ${state.newAllocations[allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash]} ${customPOI}--network ${chainStore.getActiveChain.id}\n`;
           } else{
@@ -256,14 +256,16 @@ export const useNewAllocationSetterStore = defineStore('allocationSetter', {
       let skip = [];
       for(const i in allocationStore.getSelectedAllocations){
         let allo = {};
-        if(subgraphStore.selected.includes(allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash)){
-          if(BigNumber(allocationStore.getSelectedAllocations[i].allocatedTokens).dividedBy(10**18).gt(BigNumber(state.newAllocations[allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash]))){
+        const deployHash = allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash;
+        const newAmount = state.newAllocations[deployHash] || 0;
+        if(subgraphStore.selected.includes(deployHash) && newAmount > 0){
+          if(BigNumber(allocationStore.getSelectedAllocations[i].allocatedTokens).dividedBy(10**18).gt(BigNumber(newAmount))){
             allo = {
               status: 'queued',
               type: 'reallocate',
-              deploymentID: allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash,
+              deploymentID: deployHash,
               allocationID: allocationStore.getSelectedAllocations[i].id,
-              amount: state.newAllocations[allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash].toString(),
+              amount: newAmount.toString(),
               protocolNetwork: chainStore.getActiveChain.id,
               source: 'Indexer Tools - Agent Connect',
               reason: 'Allocation Wizard',
@@ -274,9 +276,9 @@ export const useNewAllocationSetterStore = defineStore('allocationSetter', {
             allo = {
               status: 'queued',
               type: 'reallocate',
-              deploymentID: allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash,
+              deploymentID: deployHash,
               allocationID: allocationStore.getSelectedAllocations[i].id,
-              amount: state.newAllocations[allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash].toString(),
+              amount: newAmount.toString(),
               protocolNetwork: chainStore.getActiveChain.id,
               source: 'Indexer Tools - Agent Connect',
               reason: 'Allocation Wizard',
@@ -284,14 +286,14 @@ export const useNewAllocationSetterStore = defineStore('allocationSetter', {
               isLegacy: allocationStore.getSelectedAllocations[i].isLegacy,
             };
           }
-          if(state.customPOIs[allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash]){
-            allo.poi = state.customPOIs[allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash]
-            allo.poiBlockNumber = parseInt(state.customBlockHeights[allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash])
-            allo.publicPOI = state.customPublicPOIs[allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash]
+          if(state.customPOIs[deployHash]){
+            allo.poi = state.customPOIs[deployHash]
+            allo.poiBlockNumber = parseInt(state.customBlockHeights[deployHash])
+            allo.publicPOI = state.customPublicPOIs[deployHash]
             allo.force = true;
           }
           reallocate.push(allo);
-          skip.push(allocationStore.getSelectedAllocations[i].subgraphDeployment.ipfsHash);
+          skip.push(deployHash);
         }else{
           allo = {
             status: 'queued',
@@ -363,11 +365,31 @@ export const useNewAllocationSetterStore = defineStore('allocationSetter', {
       return new Promise([this.setMinimums(), this.setMinimums0Signal()]);
     },
     async setAllMaxAllos(){
+      // Compute raw max allocations per subgraph
+      let entries = [];
+      let totalMaxAllo = 0;
       for(let i = 0; i < this.getSelectedSubgraphs.length; i++){
-        if(this.getSelectedSubgraphs[i].maxAllo != Number.MIN_SAFE_INTEGER && Math.floor(this.getSelectedSubgraphs[i].maxAllo) > 0)
-          this.newAllocations[this.getSelectedSubgraphs[i].deployment.ipfsHash] = Math.floor(this.getSelectedSubgraphs[i].maxAllo);
-        else
-          this.newAllocations[this.getSelectedSubgraphs[i].deployment.ipfsHash] = 0;
+        const sub = this.getSelectedSubgraphs[i];
+        const raw = (sub.maxAllo != Number.MIN_SAFE_INTEGER && Math.floor(sub.maxAllo) > 0) ? Math.floor(sub.maxAllo) : 0;
+        entries.push({ hash: sub.deployment.ipfsHash, allo: raw });
+        totalMaxAllo += raw;
+      }
+
+      // Cap total to usable stake (available + closing, in GRT)
+      const usableGRT = parseFloat(fromWei(BigNumber(accountStore.availableStake).plus(allocationStore.calculatedClosingStake).toString()));
+      if(usableGRT > 0 && totalMaxAllo > usableGRT){
+        const scale = usableGRT / totalMaxAllo;
+        for(const entry of entries){
+          entry.allo = Math.floor(entry.allo * scale);
+        }
+      } else if(usableGRT <= 0){
+        for(const entry of entries){
+          entry.allo = 0;
+        }
+      }
+
+      for(const entry of entries){
+        this.newAllocations[entry.hash] = entry.allo;
       }
     },
     async resetAllos(){
