@@ -442,7 +442,7 @@
               class="mt-2"
             ></v-text-field>
           </div>
-          <div v-if="ruleForm.type === 'failed_subgraph'" class="mb-2">
+          <div v-if="ruleForm.type?.startsWith('failed_subgraph')" class="mb-2">
             <v-text-field
               v-model.number="ruleForm.conditions.minGrt"
               label="Min GRT Allocated"
@@ -713,7 +713,10 @@ const ruleTypes = [
   { title: 'Signal Drop', value: 'signal_drop' },
   { title: 'Proportion', value: 'proportion' },
   { title: 'Subgraph Upgrade', value: 'subgraph_upgrade' },
-  { title: 'Failed Subgraph', value: 'failed_subgraph' },
+  { title: 'Failed Subgraph (Stale)', value: 'failed_subgraph_stale' },
+  { title: 'Failed Subgraph (Deterministic)', value: 'failed_subgraph_deterministic' },
+  { title: 'Failed Subgraph (Non-Deterministic)', value: 'failed_subgraph_nondeterministic' },
+  { title: 'Failed Subgraph (All)', value: 'failed_subgraph' },
   { title: 'Behind Chainhead', value: 'behind_chainhead' },
 ];
 
@@ -1034,7 +1037,7 @@ function getAllowedActions(ruleId) {
 }
 
 // Rules that support AI-assisted autofix
-const AUTOFIX_RULE_TYPES = ['failed_subgraph', 'behind_chainhead'];
+const AUTOFIX_RULE_TYPES = ['failed_subgraph', 'failed_subgraph_stale', 'failed_subgraph_nondeterministic', 'behind_chainhead'];
 
 function canAutofix(ruleId) {
   const rule = store.rules.find((r) => r.id === ruleId);
@@ -1054,7 +1057,7 @@ const fixCommandsLoading = ref(null);
 
 function isFailedSubgraphRule(ruleId) {
   const rule = store.rules.find((r) => r.id === ruleId);
-  return rule?.type === 'failed_subgraph';
+  return rule?.type?.startsWith('failed_subgraph');
 }
 
 async function openFixCommands(item) {
