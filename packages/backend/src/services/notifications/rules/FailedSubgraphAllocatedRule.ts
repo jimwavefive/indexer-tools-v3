@@ -20,17 +20,20 @@ interface FailedDeployment {
 /**
  * Classify a failed deployment into a failure category.
  *
- * - stale: health=failed but synced to chainhead — transient error, fixable via 1-block rewind
+ * Priority: fatalError type first, then synced status.
  * - deterministic: code bug at specific block, will re-fail on rewind — NOT fixable
- * - nondeterministic: transient error while not synced — rewind MAY fix it
+ * - nondeterministic: transient error — rewind MAY fix it
+ * - stale: health=failed but NO fatalError and synced — just a stale status, fixable via rewind
  */
 export function classifyFailure(status: DeploymentStatus): FailureCategory {
+  if (status.fatalError) {
+    return status.fatalError.deterministic ? 'deterministic' : 'nondeterministic';
+  }
+  // No fatal error but health=failed and synced — truly stale status
   if (status.synced) {
     return 'stale';
   }
-  if (status.fatalError?.deterministic === true) {
-    return 'deterministic';
-  }
+  // No fatal error, not synced — shouldn't normally happen, treat as non-deterministic
   return 'nondeterministic';
 }
 
