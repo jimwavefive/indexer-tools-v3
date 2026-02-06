@@ -22,11 +22,19 @@ export interface NetworkDataSnapshot {
   maxThawingPeriod: number;
 }
 
+export interface IndexerData {
+  tokenCapacity: string;   // Wei
+  allocatedTokens: string; // Wei
+  stakedTokens: string;    // Wei
+  availableStake: string;  // Wei (can be negative)
+}
+
 export interface RuleContext {
   allocations: Allocation[];
   networkData: NetworkDataSnapshot;
   previousState: PreviousState;
   deploymentStatuses?: Map<string, DeploymentStatus>;
+  indexer?: IndexerData;
 }
 
 export interface PreviousState {

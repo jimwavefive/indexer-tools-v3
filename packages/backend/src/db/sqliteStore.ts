@@ -86,6 +86,13 @@ const DEFAULT_RULES: RuleConfig[] = [
     enabled: true,
     conditions: { blocksBehindThreshold: 5000, allowedActions: [] },
   },
+  {
+    id: 'negative-stake',
+    name: 'Negative Available Stake',
+    type: 'negative_stake',
+    enabled: true,
+    conditions: { bufferGRT: 1, allowedActions: [] },
+  },
 ];
 
 export class SqliteStore {

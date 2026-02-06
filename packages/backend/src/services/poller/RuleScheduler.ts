@@ -2,7 +2,7 @@ import { NetworkPoller } from './NetworkPoller.js';
 import { NotificationEngine, type HistoryRecord } from '../notifications/NotificationEngine.js';
 import { SqliteStore } from '../../db/sqliteStore.js';
 import type { Allocation } from '@indexer-tools/shared';
-import type { NetworkDataSnapshot, DeploymentStatus, RuleConfig } from '../notifications/rules/Rule.js';
+import type { NetworkDataSnapshot, DeploymentStatus, IndexerData, RuleConfig } from '../notifications/rules/Rule.js';
 import type { Channel } from '../notifications/channels/Channel.js';
 
 const DEFAULT_POLLING_INTERVAL_MINUTES = 60; // 1 hour
@@ -18,6 +18,7 @@ interface CachedData {
   allocations: Allocation[];
   networkData: NetworkDataSnapshot;
   deploymentStatuses?: Map<string, DeploymentStatus>;
+  indexer?: IndexerData;
   fetchedAt: number;
 }
 
@@ -195,13 +196,17 @@ export class RuleScheduler {
     try {
       console.log('RuleScheduler: fetching network data...');
 
-      const [allocations, networkData] = await Promise.all([
+      const [allocations, networkData, indexer] = await Promise.all([
         this.poller.fetchAllocations(this.indexerAddress),
         this.poller.fetchNetworkData(),
+        this.poller.fetchIndexerData(this.indexerAddress).catch((err) => {
+          console.error('Failed to fetch indexer data:', err);
+          return null;
+        }),
       ]);
 
       console.log(
-        `RuleScheduler: fetched ${allocations.length} allocations, epoch ${networkData.currentEpoch}`,
+        `RuleScheduler: fetched ${allocations.length} allocations, epoch ${networkData.currentEpoch}${indexer ? `, availableStake=${indexer.availableStake}` : ''}`,
       );
 
       // Fetch deployment statuses
@@ -224,6 +229,7 @@ export class RuleScheduler {
         allocations,
         networkData,
         deploymentStatuses,
+        indexer: indexer ?? undefined,
         fetchedAt: Date.now(),
       };
 
@@ -261,6 +267,7 @@ export class RuleScheduler {
       [ruleConfig], // Only evaluate this rule
       channels,
       data.deploymentStatuses,
+      data.indexer,
     );
 
     // Update last_polled_at for this rule
@@ -293,6 +300,7 @@ export class RuleScheduler {
       rules,
       channels,
       data.deploymentStatuses,
+      data.indexer,
     );
 
     // Update last_polled_at for all enabled rules
@@ -336,6 +344,7 @@ export class RuleScheduler {
       networkData: data.networkData,
       previousState: this.engine.currentPreviousState,
       deploymentStatuses: data.deploymentStatuses,
+      indexer: data.indexer,
     };
 
     const result = rule.evaluate(context);

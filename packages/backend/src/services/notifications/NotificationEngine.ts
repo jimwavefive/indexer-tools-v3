@@ -1,6 +1,6 @@
 import type { Allocation } from '@indexer-tools/shared';
 import type { Channel, Notification } from './channels/Channel.js';
-import type { Rule, RuleContext, NetworkDataSnapshot, PreviousState, DeploymentStatus } from './rules/Rule.js';
+import type { Rule, RuleContext, NetworkDataSnapshot, PreviousState, DeploymentStatus, IndexerData } from './rules/Rule.js';
 import type { RuleConfig } from './rules/Rule.js';
 import type { ChannelConfig } from './channels/Channel.js';
 import { AllocationDurationRule } from './rules/AllocationDurationRule.js';
@@ -14,6 +14,7 @@ import {
   FailedSubgraphNondeterministicRule,
 } from './rules/FailedSubgraphAllocatedRule.js';
 import { BehindChainheadAllocatedRule } from './rules/BehindChainheadAllocatedRule.js';
+import { NegativeStakeRule } from './rules/NegativeStakeRule.js';
 import { DiscordChannel } from './channels/DiscordChannel.js';
 import type { SqliteStore } from '../../db/sqliteStore.js';
 
@@ -66,6 +67,7 @@ export class NotificationEngine {
     ruleConfigs: RuleConfig[],
     channelConfigs: ChannelConfig[],
     deploymentStatuses?: Map<string, DeploymentStatus>,
+    indexer?: IndexerData,
   ): Promise<HistoryRecord[]> {
     const rules = ruleConfigs
       .filter((r) => r.enabled)
@@ -82,6 +84,7 @@ export class NotificationEngine {
       networkData,
       previousState: this.previousState,
       deploymentStatuses,
+      indexer,
     };
 
     const now = new Date();
@@ -241,6 +244,8 @@ export class NotificationEngine {
         return new FailedSubgraphNondeterministicRule(config);
       case 'behind_chainhead':
         return new BehindChainheadAllocatedRule(config);
+      case 'negative_stake':
+        return new NegativeStakeRule(config);
       default:
         console.warn(`Unknown rule type: ${config.type}`);
         return null;
