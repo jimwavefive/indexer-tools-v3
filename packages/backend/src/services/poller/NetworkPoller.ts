@@ -1,7 +1,7 @@
 import { print } from 'graphql';
 import { GET_ALLOCATIONS, GET_GRAPH_NETWORK } from '@indexer-tools/shared';
 import type { Allocation } from '@indexer-tools/shared';
-import type { NetworkDataSnapshot, DeploymentStatus } from '../notifications/rules/Rule.js';
+import type { NetworkDataSnapshot, DeploymentStatus, IndexerData } from '../notifications/rules/Rule.js';
 
 const DEFAULT_NETWORK_SUBGRAPH_URL =
   'https://api.thegraph.com/subgraphs/name/graphprotocol/graph-network-arbitrum';
@@ -127,6 +127,41 @@ export class NetworkPoller {
     }
 
     return json.data?.indexer?.url || null;
+  }
+
+  async fetchIndexerData(indexerAddress: string): Promise<IndexerData | null> {
+    const query = `{ indexer(id: "${indexerAddress.toLowerCase()}") { tokenCapacity stakedTokens allocatedTokens availableStake } }`;
+
+    const response = await fetch(this.networkSubgraphUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Network subgraph request failed (${response.status}): ${await response.text()}`,
+      );
+    }
+
+    const json = (await response.json()) as {
+      data?: { indexer?: { tokenCapacity: string; stakedTokens: string; allocatedTokens: string; availableStake: string } };
+      errors?: Array<{ message: string }>;
+    };
+
+    if (json.errors && json.errors.length > 0) {
+      throw new Error(`GraphQL errors: ${json.errors.map((e) => e.message).join(', ')}`);
+    }
+
+    const indexer = json.data?.indexer;
+    if (!indexer) return null;
+
+    return {
+      tokenCapacity: indexer.tokenCapacity,
+      stakedTokens: indexer.stakedTokens,
+      allocatedTokens: indexer.allocatedTokens,
+      availableStake: indexer.availableStake,
+    };
   }
 
   async fetchDeploymentStatuses(endpoint: string, deploymentHashes?: string[]): Promise<Map<string, DeploymentStatus>> {

@@ -204,6 +204,16 @@
                     Fix
                   </v-btn>
                   <v-btn
+                    v-if="item.status !== 'resolved' && isNegativeStakeRule(item.rule_id)"
+                    size="x-small"
+                    variant="tonal"
+                    color="error"
+                    @click="openNegativeStakeRecovery(item)"
+                  >
+                    <v-icon start size="small">mdi-alert-decagram</v-icon>
+                    Fix
+                  </v-btn>
+                  <v-btn
                     v-if="featureFlagStore.isEnabled('agent') && item.status !== 'resolved' && canAutofix(item.rule_id)"
                     size="x-small"
                     variant="tonal"
@@ -218,8 +228,34 @@
                   <tr>
                     <td :colspan="columns.length" class="pa-4">
                       <div class="text-subtitle-2 mb-2">{{ item.latest_title }}</div>
+                      <!-- Negative stake: allocationsToClose table -->
+                      <div v-if="item.latest_metadata?.allocationsToClose?.length">
+                        <template v-for="(value, key) in item.latest_metadata" :key="key">
+                          <div v-if="shouldShowMetadataKey(key) && !isAllocationsToCloseArray(key, value)" class="text-caption mb-1">
+                            <strong>{{ metadataLabel(key) }}:</strong> {{ formatMetadataValue(key, value) }}
+                          </div>
+                        </template>
+                        <v-table density="compact" class="text-caption mt-2">
+                          <thead>
+                            <tr>
+                              <th>Name</th>
+                              <th>Deployment</th>
+                              <th class="text-right">GRT</th>
+                              <th class="text-right">APR</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="(a, idx) in item.latest_metadata.allocationsToClose" :key="idx">
+                              <td>{{ a.name }}</td>
+                              <td style="font-family: monospace; font-size: 0.75rem">{{ a.deploymentHash }}</td>
+                              <td class="text-right">{{ Number(a.allocatedGRT).toLocaleString() }}</td>
+                              <td class="text-right">{{ a.apr }}%</td>
+                            </tr>
+                          </tbody>
+                        </v-table>
+                      </div>
                       <!-- Subgraphs detail table (replaces message for these rule types) -->
-                      <div v-if="item.latest_metadata?.subgraphs?.length">
+                      <div v-else-if="item.latest_metadata?.subgraphs?.length">
                         <template v-for="(value, key) in item.latest_metadata" :key="key">
                           <div v-if="shouldShowMetadataKey(key) && !isSubgraphsArray(key, value)" class="text-caption mb-1">
                             <strong>{{ metadataLabel(key) }}:</strong> {{ formatMetadataValue(key, value) }}
@@ -460,6 +496,15 @@
               persistent-hint
             ></v-text-field>
           </div>
+          <div v-if="ruleForm.type === 'negative_stake'" class="mb-2">
+            <v-text-field
+              v-model.number="ruleForm.conditions.bufferGRT"
+              label="Buffer GRT"
+              type="number"
+              hint="Extra GRT beyond the shortfall to target when recommending closes (default: 1)"
+              persistent-hint
+            ></v-text-field>
+          </div>
 
           <div class="mb-2">
             <div class="text-caption font-weight-bold mb-1">Allowed Incident Actions</div>
@@ -643,6 +688,93 @@
       </v-card>
     </v-dialog>
 
+    <!-- ========== NEGATIVE STAKE RECOVERY DIALOG ========== -->
+    <v-dialog v-model="negStakeDialogOpen" max-width="900" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon start color="error">mdi-alert-decagram</v-icon>
+          Negative Stake Recovery
+          <v-spacer></v-spacer>
+          <v-btn icon size="small" variant="text" @click="negStakeDialogOpen = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-card-text v-if="negStakeIncident">
+          <!-- Agent Connect check -->
+          <v-alert v-if="!accountStore.getAgentConnectStatus" type="warning" variant="tonal" density="compact" class="mb-3">
+            Configure Agent Connect in account settings to use this feature.
+          </v-alert>
+
+          <template v-else>
+            <!-- Shortfall summary -->
+            <v-alert type="error" variant="tonal" density="compact" class="mb-3">
+              Available stake is <strong>{{ Number(negStakeIncident.latest_metadata?.shortfallGRT || 0).toLocaleString() }} GRT negative</strong>.
+              Close {{ negStakeIncident.latest_metadata?.allocationsToClose?.length || 0 }} allocation(s)
+              totalling {{ Number(negStakeIncident.latest_metadata?.totalCloseGRT || 0).toLocaleString() }} GRT to recover.
+            </v-alert>
+
+            <!-- Recommended closes table -->
+            <div class="text-subtitle-2 mb-2">Recommended Closes (lowest APR first)</div>
+            <v-table density="compact" class="text-caption mb-4">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Deployment</th>
+                  <th class="text-right">GRT</th>
+                  <th class="text-right">APR</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(a, idx) in negStakeIncident.latest_metadata?.allocationsToClose || []" :key="idx">
+                  <td>{{ a.name }}</td>
+                  <td style="font-family: monospace; font-size: 0.75rem">{{ a.deploymentHash }}</td>
+                  <td class="text-right">{{ Number(a.allocatedGRT).toLocaleString() }}</td>
+                  <td class="text-right">{{ a.apr }}%</td>
+                </tr>
+              </tbody>
+            </v-table>
+
+            <!-- Current queue status -->
+            <div class="d-flex align-center mb-2">
+              <div class="text-subtitle-2">Action Queue</div>
+              <v-spacer></v-spacer>
+              <v-btn size="x-small" variant="outlined" :loading="negStakeQueueLoading" @click="refreshNegStakeQueue">
+                <v-icon start size="small">mdi-refresh</v-icon>
+                Refresh
+              </v-btn>
+            </div>
+            <v-alert v-if="negStakeQueueStatus" type="info" variant="tonal" density="compact" class="mb-3">
+              {{ negStakeQueueStatus }}
+            </v-alert>
+
+            <!-- Action buttons -->
+            <div class="d-flex ga-2">
+              <v-btn
+                v-if="negStakeQueueActions.length > 0"
+                color="warning"
+                variant="outlined"
+                size="small"
+                :loading="negStakeClearLoading"
+                @click="clearNegStakeQueue"
+              >
+                <v-icon start size="small">mdi-delete-sweep</v-icon>
+                Clear Queue ({{ negStakeQueueActions.length }})
+              </v-btn>
+              <v-btn
+                color="primary"
+                size="small"
+                :loading="negStakeAddLoading"
+                @click="addNegStakeCloses"
+              >
+                <v-icon start size="small">mdi-plus-circle</v-icon>
+                Add Closes to Queue
+              </v-btn>
+            </div>
+          </template>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <!-- ========== SNACKBAR ========== -->
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="4000" location="bottom right">
       {{ snackbar.text }}
@@ -659,12 +791,17 @@ import { useRouter } from 'vue-router';
 import { useNotificationRulesStore } from '@/store/notificationRules';
 import { useFeatureFlagStore } from '@/store/featureFlags';
 import { useAgentStore } from '@/store/agent';
+import { useAccountStore } from '@/store/accounts';
+import { useChainStore } from '@/store/chains';
+import { gql } from '@apollo/client/core';
 import IncidentAgentChat from '@/components/IncidentAgentChat.vue';
 
 const router = useRouter();
 const store = useNotificationRulesStore();
 const featureFlagStore = useFeatureFlagStore();
 const agentStore = useAgentStore();
+const accountStore = useAccountStore();
+const chainStore = useChainStore();
 
 // Guard: redirect if notifications feature flag is not enabled
 if (!featureFlagStore.isEnabled('notifications')) {
@@ -718,6 +855,7 @@ const ruleTypes = [
   { title: 'Failed Subgraph (Non-Deterministic)', value: 'failed_subgraph_nondeterministic' },
   { title: 'Failed Subgraph (All)', value: 'failed_subgraph' },
   { title: 'Behind Chainhead', value: 'behind_chainhead' },
+  { title: 'Negative Stake', value: 'negative_stake' },
 ];
 
 // --- Incident filtering ---
@@ -964,7 +1102,7 @@ function truncateHash(value) {
   return value;
 }
 
-const METADATA_HIDDEN_KEYS = new Set(['subgraphs', 'count']);
+const METADATA_HIDDEN_KEYS = new Set(['subgraphs', 'count', 'allocationsToClose']);
 
 const METADATA_LABEL_MAP = {
   minGrt: 'Min GRT Filter',
@@ -976,6 +1114,11 @@ const METADATA_LABEL_MAP = {
   thresholdEpochs: 'Threshold',
   ratio: 'Ratio',
   threshold: 'Threshold',
+  shortfallGRT: 'Shortfall',
+  targetGRT: 'Close Target',
+  availableStakeGRT: 'Available Stake',
+  totalCloseGRT: 'Total to Close',
+  bufferGRT: 'Buffer GRT',
 };
 
 function metadataLabel(key) {
@@ -1011,8 +1154,11 @@ function formatMetadataValue(key, value) {
   if (key === 'apr') {
     return `${(Number(value) * 100).toFixed(1)}%`;
   }
-  if (key === 'allocatedGRT' || key === 'allocatedTokens' || key === 'minGrt') {
-    return Number(value).toLocaleString();
+  if (key === 'allocatedGRT' || key === 'allocatedTokens' || key === 'minGrt' || key === 'shortfallGRT' || key === 'targetGRT' || key === 'totalCloseGRT') {
+    return Number(value).toLocaleString() + ' GRT';
+  }
+  if (key === 'availableStakeGRT') {
+    return Number(value).toLocaleString() + ' GRT';
   }
   if (key === 'signalProportion' || key === 'stakeProportion') {
     return `${(Number(value) * 100).toFixed(4)}%`;
@@ -1060,6 +1206,15 @@ function isFailedSubgraphRule(ruleId) {
   return rule?.type?.startsWith('failed_subgraph');
 }
 
+function isNegativeStakeRule(ruleId) {
+  const rule = store.rules.find((r) => r.id === ruleId);
+  return rule?.type === 'negative_stake';
+}
+
+function isAllocationsToCloseArray(key, value) {
+  return key === 'allocationsToClose' && Array.isArray(value);
+}
+
 async function openFixCommands(item) {
   fixCommandsLoading.value = item.id;
   fixCommandsData.value = null;
@@ -1081,6 +1236,128 @@ function copyScript() {
   }).catch(() => {
     showSnackbar('Failed to copy — select and copy manually', 'error');
   });
+}
+
+// --- Negative Stake Recovery ---
+const negStakeDialogOpen = ref(false);
+const negStakeIncident = ref(null);
+const negStakeQueueActions = ref([]);
+const negStakeQueueLoading = ref(false);
+const negStakeClearLoading = ref(false);
+const negStakeAddLoading = ref(false);
+const negStakeQueueStatus = ref('');
+
+const ACTIONS_QUERY = gql`
+  query actions($filter: ActionFilter!) {
+    actions(filter: $filter) {
+      id status type deploymentID allocationID amount poi publicPOI
+      poiBlockNumber force priority source reason transaction
+      failureReason createdAt updatedAt protocolNetwork isLegacy
+    }
+  }
+`;
+
+const QUEUE_ACTIONS_MUTATION = gql`
+  mutation queueActions($actions: [ActionInput!]!) {
+    queueActions(actions: $actions) {
+      id status type deploymentID allocationID protocolNetwork isLegacy
+    }
+  }
+`;
+
+const DELETE_ACTIONS_MUTATION = gql`
+  mutation deleteActions($actionIDs: [String!]!) {
+    deleteActions(actionIDs: $actionIDs) {
+      id
+    }
+  }
+`;
+
+async function openNegativeStakeRecovery(item) {
+  negStakeIncident.value = item;
+  negStakeQueueActions.value = [];
+  negStakeQueueStatus.value = '';
+  negStakeDialogOpen.value = true;
+  if (accountStore.getAgentConnectStatus) {
+    await refreshNegStakeQueue();
+  }
+}
+
+async function refreshNegStakeQueue() {
+  negStakeQueueLoading.value = true;
+  try {
+    const client = accountStore.getAgentConnectClient;
+    const result = await client.query({
+      query: ACTIONS_QUERY,
+      variables: { filter: {} },
+      fetchPolicy: 'network-only',
+    });
+    const actions = result.data?.actions || [];
+    // Filter to non-success actions
+    const active = actions.filter((a) => a.status !== 'success');
+    negStakeQueueActions.value = active;
+
+    const queued = actions.filter((a) => a.status === 'queued').length;
+    const approved = actions.filter((a) => a.status === 'approved').length;
+    const failed = actions.filter((a) => a.status === 'failed').length;
+    const pending = actions.filter((a) => a.status === 'pending').length;
+    negStakeQueueStatus.value = `${queued} queued, ${approved} approved, ${pending} pending, ${failed} failed`;
+  } catch (err) {
+    negStakeQueueStatus.value = 'Failed to fetch queue: ' + (err.message || err);
+  } finally {
+    negStakeQueueLoading.value = false;
+  }
+}
+
+async function clearNegStakeQueue() {
+  if (!negStakeQueueActions.value.length) return;
+  negStakeClearLoading.value = true;
+  try {
+    const client = accountStore.getAgentConnectClient;
+    const ids = negStakeQueueActions.value.map((a) => a.id);
+    await client.mutate({
+      mutation: DELETE_ACTIONS_MUTATION,
+      variables: { actionIDs: ids },
+    });
+    showSnackbar(`Cleared ${ids.length} action(s) from queue`, 'success');
+    await refreshNegStakeQueue();
+  } catch (err) {
+    showSnackbar('Failed to clear queue: ' + (err.message || err), 'error');
+  } finally {
+    negStakeClearLoading.value = false;
+  }
+}
+
+async function addNegStakeCloses() {
+  const allocs = negStakeIncident.value?.latest_metadata?.allocationsToClose;
+  if (!allocs?.length) return;
+  negStakeAddLoading.value = true;
+  try {
+    const client = accountStore.getAgentConnectClient;
+    const protocolNetwork = chainStore.getActiveChain?.id || 'arbitrum-one';
+    const actions = allocs.map((a) => ({
+      status: 'queued',
+      type: 'unallocate',
+      deploymentID: a.deploymentHash,
+      allocationID: a.allocationId,
+      protocolNetwork,
+      source: 'Indexer Tools - Agent Connect',
+      reason: 'Negative Stake Recovery',
+      priority: 1,
+      isLegacy: a.isLegacy,
+    }));
+    await client.mutate({
+      mutation: QUEUE_ACTIONS_MUTATION,
+      variables: { actions },
+    });
+    showSnackbar(`Queued ${actions.length} unallocate action(s)`, 'success');
+    negStakeDialogOpen.value = false;
+    router.push('/actions-manager');
+  } catch (err) {
+    showSnackbar('Failed to queue actions: ' + (err.message || err), 'error');
+  } finally {
+    negStakeAddLoading.value = false;
+  }
 }
 
 // --- Tab change: load data for active tab ---
