@@ -99,6 +99,10 @@ function indexerCut(rewards, rewardCut){
 function calculateAutoTargetApr(selectedSubgraphs, futureStakedTokens, networkStore, availableStakeWei, closingStakeWei, reserveGRT = '1') {
   const reserveWei = new BigNumber(reserveGRT).multipliedBy(WEI_PER_ETHER);
 
+  // Usable GRT = available + closing - reserve. If <= 0, nothing to allocate.
+  const usableStakeWei = new BigNumber(availableStakeWei).plus(closingStakeWei).minus(reserveWei);
+  if (usableStakeWei.isLessThanOrEqualTo(0)) return new BigNumber(0);
+
   // Build initial eligible set (non-denied, has signal)
   let eligible = [];
   for (let i = 0; i < selectedSubgraphs.length; i++) {

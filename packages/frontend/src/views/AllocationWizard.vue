@@ -63,7 +63,7 @@
         <v-card>
           <v-card-text>
               Allocation Remaining:
-              <h1 class="pt-2">{{ numeral(fromWei(toBN(newAllocationSetterStore.calculatedAvailableStake))).format('0,0') }}</h1>
+              <h1 class="pt-2" :class="{ 'text-error': BigNumber(newAllocationSetterStore.calculatedAvailableStake).isLessThan(0) }">{{ numeral(fromWei(toBN(newAllocationSetterStore.calculatedAvailableStake))).format('0,0') }}</h1>
           </v-card-text>
         </v-card>
 
