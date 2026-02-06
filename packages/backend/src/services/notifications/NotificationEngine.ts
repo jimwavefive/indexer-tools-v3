@@ -7,7 +7,12 @@ import { AllocationDurationRule } from './rules/AllocationDurationRule.js';
 import { SignalDropRule } from './rules/SignalDropRule.js';
 import { ProportionRule } from './rules/ProportionRule.js';
 import { SubgraphUpgradeRule } from './rules/SubgraphUpgradeRule.js';
-import { FailedSubgraphAllocatedRule } from './rules/FailedSubgraphAllocatedRule.js';
+import {
+  FailedSubgraphAllocatedRule,
+  FailedSubgraphStaleRule,
+  FailedSubgraphDeterministicRule,
+  FailedSubgraphNondeterministicRule,
+} from './rules/FailedSubgraphAllocatedRule.js';
 import { BehindChainheadAllocatedRule } from './rules/BehindChainheadAllocatedRule.js';
 import { DiscordChannel } from './channels/DiscordChannel.js';
 import type { SqliteStore } from '../../db/sqliteStore.js';
@@ -228,6 +233,12 @@ export class NotificationEngine {
         return new SubgraphUpgradeRule(config);
       case 'failed_subgraph':
         return new FailedSubgraphAllocatedRule(config);
+      case 'failed_subgraph_stale':
+        return new FailedSubgraphStaleRule(config);
+      case 'failed_subgraph_deterministic':
+        return new FailedSubgraphDeterministicRule(config);
+      case 'failed_subgraph_nondeterministic':
+        return new FailedSubgraphNondeterministicRule(config);
       case 'behind_chainhead':
         return new BehindChainheadAllocatedRule(config);
       default:
