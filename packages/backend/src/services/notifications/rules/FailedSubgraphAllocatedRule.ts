@@ -13,7 +13,7 @@ interface FailedDeployment {
   displayName: string;
   allocatedGRT: BigNumber;
   errorMessage?: string;
-  closeable: boolean;
+  rewardsEligible: boolean;
   category: FailureCategory;
 }
 
@@ -68,14 +68,19 @@ function collectFailedDeployments(
         deploymentHash.slice(0, 12) + '...';
 
       const category = classifyFailure(status);
-      const closeable = category === 'stale';
+
+      // Rewards eligibility: same logic as the wizard's "Closeable" filter.
+      // A synced deployment can produce a valid POI for the current epoch,
+      // even with a deterministic failure (it failed at a block past epoch start).
+      const rewardsEligible = status.synced === true &&
+        (!status.fatalError || status.fatalError.deterministic === true);
 
       deploymentMap.set(deploymentHash, {
         deploymentHash,
         displayName,
         allocatedGRT,
         errorMessage: status.fatalError?.message,
-        closeable,
+        rewardsEligible,
         category,
       });
     }
@@ -119,7 +124,7 @@ function buildNotification(
     deploymentHash: d.deploymentHash,
     allocatedGRT: d.allocatedGRT.toFixed(0),
     errorMessage: d.errorMessage,
-    closeable: d.closeable,
+    rewardsEligible: d.rewardsEligible,
     category: d.category,
   }));
 
@@ -267,19 +272,19 @@ export class FailedSubgraphAllocatedRule implements Rule {
       return { triggered: false, notifications: [] };
     }
 
-    // Include closeable column in the legacy rule output
+    // Include rewards eligibility column in the legacy rule output
     matching.sort((a, b) => b.allocatedGRT.minus(a.allocatedGRT).toNumber());
 
     const shown = matching.slice(0, MAX_LIST_ENTRIES);
     const nameW = Math.max(4, ...shown.map((e) => e.displayName.length));
     const grtW = Math.max(3, ...shown.map((e) => e.allocatedGRT.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',').length));
-    const closeW = 9;
-    const hdr = `${'Name'.padEnd(nameW)}  ${'GRT'.padStart(grtW)}  ${'Closeable'.padStart(closeW)}`;
+    const rewardsW = 10;
+    const hdr = `${'Name'.padEnd(nameW)}  ${'GRT'.padStart(grtW)}  ${'Rewards'.padStart(rewardsW)}`;
     const sep = '─'.repeat(hdr.length);
     const rows = shown.map((entry) => {
       const grt = entry.allocatedGRT.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-      const close = entry.closeable ? 'YES' : 'NO';
-      return `${entry.displayName.padEnd(nameW)}  ${grt.padStart(grtW)}  ${close.padStart(closeW)}`;
+      const rewards = entry.rewardsEligible ? 'Eligible' : 'Ineligible';
+      return `${entry.displayName.padEnd(nameW)}  ${grt.padStart(grtW)}  ${rewards.padStart(rewardsW)}`;
     });
 
     let message = '```\n' + hdr + '\n' + sep + '\n' + rows.join('\n') + '\n```';
@@ -292,7 +297,7 @@ export class FailedSubgraphAllocatedRule implements Rule {
       deploymentHash: d.deploymentHash,
       allocatedGRT: d.allocatedGRT.toFixed(0),
       errorMessage: d.errorMessage,
-      closeable: d.closeable,
+      rewardsEligible: d.rewardsEligible,
       category: d.category,
     }));
 
