@@ -1,6 +1,7 @@
 import { NetworkPoller } from './NetworkPoller.js';
 import { NotificationEngine, type HistoryRecord } from '../notifications/NotificationEngine.js';
 import { SqliteStore } from '../../db/sqliteStore.js';
+import type { SseManager } from '../sse/SseManager.js';
 import type { Allocation } from '@indexer-tools/shared';
 import type { NetworkDataSnapshot, DeploymentStatus, IndexerData, RuleConfig } from '../notifications/rules/Rule.js';
 import type { Channel } from '../notifications/channels/Channel.js';
@@ -46,6 +47,7 @@ export class RuleScheduler {
     indexerAddress: string;
     pollingIntervalMinutes?: number;
     indexerStatusEndpoint?: string;
+    sseManager?: SseManager;
   }) {
     this.poller = new NetworkPoller();
     this.store = options.store;
@@ -54,6 +56,8 @@ export class RuleScheduler {
     this.globalIntervalMs =
       (options.pollingIntervalMinutes ?? DEFAULT_POLLING_INTERVAL_MINUTES) * 60 * 1000;
 
+    const sseManager = options.sseManager;
+
     this.engine = new NotificationEngine({
       store: this.store,
       onHistoryRecord: (record) => {
@@ -61,6 +65,20 @@ export class RuleScheduler {
           console.error('Failed to persist history record:', err);
         });
       },
+      onIncidentChange: sseManager
+        ? (event) => {
+            sseManager.broadcast({
+              type: `incident:${event.type}`,
+              incidentId: event.incidentId,
+              ruleId: event.ruleId,
+              status: event.status,
+              severity: event.severity,
+              targetLabel: event.targetLabel,
+              title: event.title,
+              timestamp: event.timestamp,
+            });
+          }
+        : undefined,
     });
   }
 

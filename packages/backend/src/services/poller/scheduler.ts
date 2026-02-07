@@ -1,5 +1,6 @@
 import { RuleScheduler } from './RuleScheduler.js';
 import { SqliteStore } from '../../db/sqliteStore.js';
+import type { SseManager } from '../sse/SseManager.js';
 import type { HistoryRecord } from '../notifications/NotificationEngine.js';
 import type { Allocation } from '@indexer-tools/shared';
 import type { NetworkDataSnapshot, DeploymentStatus } from '../notifications/rules/Rule.js';
@@ -19,6 +20,7 @@ export class PollingScheduler {
     indexerAddress: string;
     pollingIntervalMinutes?: number;
     indexerStatusEndpoint?: string;
+    sseManager?: SseManager;
   }) {
     this.ruleScheduler = new RuleScheduler(options);
   }

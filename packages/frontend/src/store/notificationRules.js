@@ -12,6 +12,10 @@ export const useNotificationRulesStore = defineStore('notificationRules', {
       pollingIntervalMinutes: 60,
     },
     loading: false,
+    sseConnected: false,
+    lastSseEvent: null,
+    _eventSource: null,
+    _reconnectTimer: null,
   }),
   actions: {
     // --- Rules ---
@@ -292,6 +296,97 @@ export const useNotificationRulesStore = defineStore('notificationRules', {
       } finally {
         this.loading = false;
       }
+    },
+
+    // --- SSE ---
+    connectSSE() {
+      if (this._eventSource) return;
+
+      const es = new EventSource(`${BASE_URL}/api/notifications/incidents/stream`);
+
+      es.addEventListener('connected', () => {
+        this.sseConnected = true;
+        console.log('[SSE] Connected to incident stream');
+      });
+
+      es.addEventListener('incident', (e) => {
+        try {
+          const event = JSON.parse(e.data);
+          this._handleIncidentEvent(event);
+        } catch (err) {
+          console.error('[SSE] Failed to parse incident event:', err);
+        }
+      });
+
+      es.onerror = () => {
+        this.sseConnected = false;
+        es.close();
+        this._eventSource = null;
+        // Reconnect after 5 seconds
+        this._reconnectTimer = setTimeout(() => {
+          this._reconnectTimer = null;
+          this.connectSSE();
+        }, 5000);
+      };
+
+      this._eventSource = es;
+    },
+
+    disconnectSSE() {
+      if (this._reconnectTimer) {
+        clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = null;
+      }
+      if (this._eventSource) {
+        this._eventSource.close();
+        this._eventSource = null;
+      }
+      this.sseConnected = false;
+    },
+
+    _handleIncidentEvent(event) {
+      const { type, incidentId } = event;
+
+      if (type === 'incident:created') {
+        // Only add if not already present
+        if (!this.incidents.find((i) => i.id === incidentId)) {
+          // Fetch the full incident from the API to get complete data
+          fetch(`${BASE_URL}/api/notifications/incidents/${incidentId}`)
+            .then((res) => res.ok ? res.json() : null)
+            .then((incident) => {
+              if (incident && !this.incidents.find((i) => i.id === incidentId)) {
+                this.incidents.unshift(incident);
+              }
+            })
+            .catch(() => {});
+        }
+      } else if (type === 'incident:updated' || type === 'incident:acknowledged') {
+        const idx = this.incidents.findIndex((i) => i.id === incidentId);
+        if (idx !== -1) {
+          // Update status in-place for immediate reactivity
+          if (type === 'incident:acknowledged') {
+            this.incidents[idx] = { ...this.incidents[idx], status: 'acknowledged' };
+          }
+          // Fetch full updated data
+          fetch(`${BASE_URL}/api/notifications/incidents/${incidentId}`)
+            .then((res) => res.ok ? res.json() : null)
+            .then((incident) => {
+              if (incident) {
+                const i = this.incidents.findIndex((x) => x.id === incidentId);
+                if (i !== -1) this.incidents[i] = incident;
+              }
+            })
+            .catch(() => {});
+        }
+      } else if (type === 'incident:resolved' || type === 'incident:auto-resolved') {
+        const idx = this.incidents.findIndex((i) => i.id === incidentId);
+        if (idx !== -1) {
+          this.incidents[idx] = { ...this.incidents[idx], status: 'resolved', resolved_at: event.timestamp };
+        }
+      }
+
+      // Set lastSseEvent for browser notification watcher
+      this.lastSseEvent = event;
     },
   },
 });

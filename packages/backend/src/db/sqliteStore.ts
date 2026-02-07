@@ -613,13 +613,13 @@ export class SqliteStore {
    * If enabledRuleIds is provided, only considers incidents for those rules —
    * incidents from disabled rules are left untouched.
    */
-  autoResolveIncidents(firedKeys: Set<string>, enabledRuleIds?: Set<string>): number {
+  autoResolveIncidents(firedKeys: Set<string>, enabledRuleIds?: Set<string>): { count: number; resolvedIds: string[] } {
     const openIncidents = this.db.prepare(
       "SELECT id, rule_id, target_key FROM incidents WHERE status IN ('open', 'acknowledged') AND auto_resolve = 1",
     ).all() as Array<{ id: string; rule_id: string; target_key: string }>;
 
     const now = new Date().toISOString();
-    let resolved = 0;
+    const resolvedIds: string[] = [];
 
     const update = this.db.prepare(
       "UPDATE incidents SET status = 'resolved', resolved_at = ? WHERE id = ?",
@@ -632,11 +632,11 @@ export class SqliteStore {
       const key = `${inc.rule_id}:${inc.target_key}`;
       if (!firedKeys.has(key)) {
         update.run(now, inc.id);
-        resolved++;
+        resolvedIds.push(inc.id);
       }
     }
 
-    return resolved;
+    return { count: resolvedIds.length, resolvedIds };
   }
 
   // --- Settings ---

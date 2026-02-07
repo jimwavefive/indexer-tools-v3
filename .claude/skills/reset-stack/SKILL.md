@@ -17,7 +17,7 @@ Current container status:
 !`docker compose ps 2>/dev/null || echo "No containers running"`
 
 Docker volume info:
-!`docker volume inspect indexer-tools-data 2>/dev/null | head -20 || echo "Volume not found"`
+!`docker volume inspect indexer-tools-v3_indexer-tools-data 2>/dev/null | head -20 || echo "Volume not found"`
 
 ## Workflow
 
@@ -33,13 +33,13 @@ docker compose down
 
 ### Step 3 — Wipe database
 
-Delete the SQLite database file from the named volume:
+Delete all database files from the named volume. The compose project prefixes the volume name, so the actual volume is `indexer-tools-v3_indexer-tools-data`:
 
 ```bash
-docker run --rm -v indexer-tools-data:/data alpine sh -c "rm -f /data/*.db /data/*.db-wal /data/*.db-shm && echo 'Database wiped'"
+docker run --rm -v indexer-tools-v3_indexer-tools-data:/data alpine sh -c "rm -f /data/*.db /data/*.db-wal /data/*.db-shm /data/*.json && ls -la /data/ && echo 'Database wiped'"
 ```
 
-If no named volume exists, check for a local `./data` directory and clear it instead.
+Verify the output shows an empty directory. If the volume doesn't exist, check for a local `./data` directory and clear it instead.
 
 ### Step 4 — Rebuild and start
 

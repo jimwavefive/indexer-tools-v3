@@ -5,6 +5,7 @@ import { SqliteStore } from '../../db/sqliteStore.js';
 import type { RuleConfig } from '../../services/notifications/rules/Rule.js';
 import type { ChannelConfig } from '../../services/notifications/channels/Channel.js';
 import type { PollingScheduler } from '../../services/poller/scheduler.js';
+import type { SseManager } from '../../services/sse/SseManager.js';
 import { getChainRpcService } from '../../services/rpc/ChainRpcService.js';
 
 /** Validate that a webhook URL is safe to fetch (SSRF protection). */
@@ -29,8 +30,18 @@ function isAllowedWebhookUrl(urlStr: string): { ok: boolean; reason?: string } {
   return { ok: true };
 }
 
-export function createNotificationRoutes(store: SqliteStore, scheduler?: PollingScheduler): Router {
+export function createNotificationRoutes(store: SqliteStore, scheduler?: PollingScheduler, sseManager?: SseManager): Router {
   const router = Router();
+
+  // --- SSE Stream (must be registered before /incidents/:id to avoid matching 'stream' as :id) ---
+
+  router.get('/api/notifications/incidents/stream', (req: Request, res: Response) => {
+    if (!sseManager) {
+      res.status(503).json({ error: 'SSE not available' });
+      return;
+    }
+    sseManager.addClient(req, res);
+  });
 
   // --- Rules ---
 
@@ -376,6 +387,18 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
         return;
       }
       store.updateIncident(req.params.id, { status: 'acknowledged' });
+
+      sseManager?.broadcast({
+        type: 'incident:acknowledged',
+        incidentId: incident.id,
+        ruleId: incident.rule_id,
+        status: 'acknowledged',
+        severity: incident.severity,
+        targetLabel: incident.target_label,
+        title: incident.latest_title,
+        timestamp: new Date().toISOString(),
+      });
+
       res.json({ ...incident, status: 'acknowledged' });
     } catch (err) {
       console.error('Failed to acknowledge incident:', err);
@@ -390,11 +413,24 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
         res.status(404).json({ error: 'Incident not found' });
         return;
       }
+      const resolvedAt = new Date().toISOString();
       store.updateIncident(req.params.id, {
         status: 'resolved',
-        resolved_at: new Date().toISOString(),
+        resolved_at: resolvedAt,
       });
-      res.json({ ...incident, status: 'resolved', resolved_at: new Date().toISOString() });
+
+      sseManager?.broadcast({
+        type: 'incident:resolved',
+        incidentId: incident.id,
+        ruleId: incident.rule_id,
+        status: 'resolved',
+        severity: incident.severity,
+        targetLabel: incident.target_label,
+        title: incident.latest_title,
+        timestamp: resolvedAt,
+      });
+
+      res.json({ ...incident, status: 'resolved', resolved_at: resolvedAt });
     } catch (err) {
       console.error('Failed to resolve incident:', err);
       res.status(500).json({ error: 'Failed to resolve incident' });
