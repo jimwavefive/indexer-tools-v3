@@ -6,6 +6,7 @@ import { createNotificationRoutes } from './api/routes/notifications.js';
 import agentRouter, { initializeAgentRoutes } from './api/routes/agent.js';
 import { SqliteStore } from './db/sqliteStore.js';
 import { PollingScheduler } from './services/poller/scheduler.js';
+import { SseManager } from './services/sse/SseManager.js';
 import type { ChannelConfig } from './services/notifications/channels/Channel.js';
 
 /**
@@ -111,6 +112,9 @@ await store.migrateFromJson();
 // Sync env-defined notification channels into the store
 await syncEnvChannels(store);
 
+// SSE manager for real-time incident updates
+const sseManager = new SseManager();
+
 // Start notification polling if enabled
 let scheduler: PollingScheduler | undefined;
 
@@ -139,6 +143,7 @@ if (process.env.FEATURE_NOTIFICATIONS_ENABLED === 'true') {
       indexerAddress,
       pollingIntervalMinutes,
       indexerStatusEndpoint,
+      sseManager,
     });
 
     scheduler.start();
@@ -154,7 +159,13 @@ const agentLimiter = rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: '
 
 // Routes
 app.use(healthRoutes);
-app.use(generalLimiter, createNotificationRoutes(store, scheduler));
+
+// SSE endpoint — registered before rate limiter (long-lived connection would trip rate limit)
+app.get('/api/notifications/incidents/stream', (req, res) => {
+  sseManager.addClient(req, res);
+});
+
+app.use(generalLimiter, createNotificationRoutes(store, scheduler, sseManager));
 app.use('/api/agent', agentLimiter, agentRouter);
 
 const server = app.listen(port, () => {

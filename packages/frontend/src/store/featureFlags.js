@@ -21,6 +21,12 @@ const FLAG_DEFINITIONS = {
     envVar: 'VITE_FEATURE_AUTO_TARGET_APR',
     default: true,
   },
+  browserNotifications: {
+    label: 'Browser Notifications',
+    description: 'Desktop notifications for new incidents via Web Notifications API',
+    envVar: 'VITE_FEATURE_BROWSER_NOTIFICATIONS',
+    default: false,
+  },
   experimentalUI: {
     label: 'Experimental UI',
     description: 'Experimental UI features and components',

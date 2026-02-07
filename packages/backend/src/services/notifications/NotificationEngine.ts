@@ -27,6 +27,17 @@ export interface HistoryRecord {
   isTest?: boolean;
 }
 
+export interface IncidentChangeEvent {
+  type: 'created' | 'updated' | 'auto-resolved';
+  incidentId: string;
+  ruleId: string;
+  status: string;
+  severity: string;
+  targetLabel: string;
+  title: string;
+  timestamp: string;
+}
+
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -55,10 +66,16 @@ export class NotificationEngine {
   };
   private store: SqliteStore;
   private onHistoryRecord?: (record: HistoryRecord) => void;
+  private onIncidentChange?: (event: IncidentChangeEvent) => void;
 
-  constructor(options: { store: SqliteStore; onHistoryRecord?: (record: HistoryRecord) => void }) {
+  constructor(options: {
+    store: SqliteStore;
+    onHistoryRecord?: (record: HistoryRecord) => void;
+    onIncidentChange?: (event: IncidentChangeEvent) => void;
+  }) {
     this.store = options.store;
     this.onHistoryRecord = options?.onHistoryRecord;
+    this.onIncidentChange = options?.onIncidentChange;
   }
 
   async evaluate(
@@ -126,6 +143,17 @@ export class NotificationEngine {
             channel_ids: sentChannelIds,
           });
 
+          this.onIncidentChange?.({
+            type: 'updated',
+            incidentId: existing.id,
+            ruleId: rule.id,
+            status: existing.status,
+            severity: notification.severity,
+            targetLabel,
+            title: notification.title,
+            timestamp: nowIso,
+          });
+
           // Skip re-notification for acknowledged incidents
           if (existing.status === 'acknowledged') {
             continue;
@@ -153,6 +181,17 @@ export class NotificationEngine {
             latest_message: notification.message,
             latest_metadata: (notification.metadata || {}) as Record<string, unknown>,
             channel_ids: sentChannelIds,
+          });
+
+          this.onIncidentChange?.({
+            type: 'created',
+            incidentId,
+            ruleId: rule.id,
+            status: 'open',
+            severity: notification.severity,
+            targetLabel,
+            title: notification.title,
+            timestamp: nowIso,
           });
 
           toSend.push({ notification, incidentId });
@@ -203,9 +242,27 @@ export class NotificationEngine {
     // Only auto-resolve for rules that were actually evaluated (enabled) —
     // disabled rules don't fire, so their incidents would be wrongly resolved.
     const enabledRuleIds = new Set(rules.map((r) => r.id));
-    const resolved = this.store.autoResolveIncidents(firedKeys, enabledRuleIds);
-    if (resolved > 0) {
-      console.log(`Auto-resolved ${resolved} incident(s)`);
+    const { count: resolvedCount, resolvedIds } = this.store.autoResolveIncidents(firedKeys, enabledRuleIds);
+    if (resolvedCount > 0) {
+      console.log(`Auto-resolved ${resolvedCount} incident(s)`);
+
+      if (this.onIncidentChange) {
+        for (const id of resolvedIds) {
+          const inc = this.store.getIncidentById(id);
+          if (inc) {
+            this.onIncidentChange({
+              type: 'auto-resolved',
+              incidentId: id,
+              ruleId: inc.rule_id,
+              status: 'resolved',
+              severity: inc.severity,
+              targetLabel: inc.target_label,
+              title: inc.latest_title,
+              timestamp: nowIso,
+            });
+          }
+        }
+      }
     }
 
     // Update previous state for next evaluation

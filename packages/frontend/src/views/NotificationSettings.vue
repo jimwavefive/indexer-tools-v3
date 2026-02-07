@@ -136,6 +136,26 @@
                   @update:model-value="loadIncidents"
                 ></v-select>
                 <v-spacer></v-spacer>
+                <v-chip
+                  v-if="store.sseConnected"
+                  color="success"
+                  size="x-small"
+                  label
+                  class="mr-2"
+                >
+                  <v-icon start size="x-small">mdi-access-point</v-icon>
+                  Live
+                </v-chip>
+                <v-chip
+                  v-else
+                  color="grey"
+                  size="x-small"
+                  label
+                  class="mr-2"
+                >
+                  <v-icon start size="x-small">mdi-access-point-off</v-icon>
+                  Offline
+                </v-chip>
                 <v-btn variant="outlined" size="small" @click="loadIncidents">
                   <v-icon start>mdi-refresh</v-icon>
                   Refresh
@@ -412,6 +432,42 @@
                   ></v-text-field>
                 </v-col>
               </v-row>
+              <v-divider class="my-4"></v-divider>
+
+              <div class="text-subtitle-1 mb-2">Browser Notifications</div>
+              <v-row>
+                <v-col cols="12" md="6">
+                  <v-switch
+                    :model-value="featureFlagStore.isEnabled('browserNotifications')"
+                    label="Enable desktop notifications for new incidents"
+                    hide-details
+                    density="compact"
+                    :disabled="!browserNotifSupported"
+                    @update:model-value="toggleBrowserNotifications"
+                  ></v-switch>
+                  <v-alert
+                    v-if="!browserNotifSupported"
+                    type="warning"
+                    variant="tonal"
+                    density="compact"
+                    class="mt-2"
+                  >
+                    Your browser does not support the Web Notifications API.
+                  </v-alert>
+                  <v-alert
+                    v-else-if="browserNotifPermission === 'denied'"
+                    type="warning"
+                    variant="tonal"
+                    density="compact"
+                    class="mt-2"
+                  >
+                    Notification permission was denied. Please allow notifications in your browser settings.
+                  </v-alert>
+                </v-col>
+              </v-row>
+
+              <v-divider class="my-4"></v-divider>
+
               <div class="d-flex justify-end mt-4">
                 <v-btn color="primary" @click="saveSettings" :loading="store.loading">
                   <v-icon start>mdi-content-save</v-icon>
@@ -786,13 +842,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useNotificationRulesStore } from '@/store/notificationRules';
 import { useFeatureFlagStore } from '@/store/featureFlags';
 import { useAgentStore } from '@/store/agent';
 import { useAccountStore } from '@/store/accounts';
 import { useChainStore } from '@/store/chains';
+import { useBrowserNotifications } from '@/composables/useBrowserNotifications';
 import { gql } from '@apollo/client/core';
 import IncidentAgentChat from '@/components/IncidentAgentChat.vue';
 
@@ -802,6 +859,7 @@ const featureFlagStore = useFeatureFlagStore();
 const agentStore = useAgentStore();
 const accountStore = useAccountStore();
 const chainStore = useChainStore();
+const { isSupported: browserNotifSupported, permissionState: browserNotifPermission, requestPermission: requestBrowserNotifPermission, handleIncidentEvent } = useBrowserNotifications();
 
 // Guard: redirect if notifications feature flag is not enabled
 if (!featureFlagStore.isEnabled('notifications')) {
@@ -919,6 +977,17 @@ async function saveSettings() {
     pollingIntervalMinutes: Math.max(1, Math.min(120, settingsForm.value.pollingIntervalMinutes)),
   });
   settingsForm.value = { ...store.settings };
+}
+
+async function toggleBrowserNotifications(enabled) {
+  if (enabled) {
+    const permission = await requestBrowserNotifPermission();
+    if (permission !== 'granted') {
+      showSnackbar('Notification permission denied by browser', 'warning');
+      return;
+    }
+  }
+  featureFlagStore.setFlag('browserNotifications', enabled);
 }
 
 // --- Rule Dialog ---
@@ -1371,6 +1440,13 @@ watch(tab, (newTab) => {
   }
 });
 
+// --- SSE → Browser Notification bridge ---
+watch(() => store.lastSseEvent, (event) => {
+  if (event && featureFlagStore.isEnabled('browserNotifications')) {
+    handleIncidentEvent(event);
+  }
+});
+
 // --- Lifecycle ---
 onMounted(async () => {
   await Promise.all([
@@ -1379,6 +1455,11 @@ onMounted(async () => {
     store.fetchHistory(),
     store.fetchIncidents(incidentStatusFilter.value),
   ]);
+  store.connectSSE();
+});
+
+onUnmounted(() => {
+  store.disconnectSSE();
 });
 </script>
 
