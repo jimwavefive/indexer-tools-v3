@@ -224,6 +224,17 @@
                     Fix
                   </v-btn>
                   <v-btn
+                    v-if="item.status !== 'resolved' && isBehindChainheadRule(item.rule_id)"
+                    size="x-small"
+                    variant="tonal"
+                    color="warning"
+                    :loading="fixCommandsLoading === item.id"
+                    @click="openFixCommands(item)"
+                  >
+                    <v-icon start size="small">mdi-wrench</v-icon>
+                    Fix
+                  </v-btn>
+                  <v-btn
                     v-if="item.status !== 'resolved' && isNegativeStakeRule(item.rule_id)"
                     size="x-small"
                     variant="tonal"
@@ -684,53 +695,144 @@
           </v-btn>
         </v-card-title>
         <v-card-text v-if="fixCommandsData">
-          <!-- Summary -->
-          <v-alert v-if="fixCommandsData.staleDeployments.length > 0" type="success" variant="tonal" density="compact" class="mb-3">
-            {{ fixCommandsData.staleDeployments.length }} stale failure(s) can be fixed with graphman rewind
-          </v-alert>
-          <v-alert v-if="fixCommandsData.genuineFailures.length > 0" type="warning" variant="tonal" density="compact" class="mb-3">
-            {{ fixCommandsData.genuineFailures.length }} genuine failure(s) cannot be fixed by rewind (need subgraph code fixes)
-          </v-alert>
-          <v-alert v-if="fixCommandsData.unknownDeployments?.length > 0" type="info" variant="tonal" density="compact" class="mb-3">
-            {{ fixCommandsData.unknownDeployments.length }} deployment(s) have unknown status (no cached data)
-          </v-alert>
-          <v-alert v-if="fixCommandsData.staleDeployments.length === 0 && fixCommandsData.genuineFailures.length === 0" type="info" variant="tonal" density="compact" class="mb-3">
-            No deployment status data available. The poller may not have run yet.
-          </v-alert>
+          <!-- ── Behind Chainhead layout ── -->
+          <template v-if="fixCommandsData.fixType === 'behind_chainhead'">
+            <v-alert v-if="fixCommandsData.behindDeployments?.length > 0" type="warning" variant="tonal" density="compact" class="mb-3">
+              {{ fixCommandsData.behindDeployments.length }} deployment(s) behind chainhead &mdash; script will diagnose and attempt restart
+            </v-alert>
+            <v-alert v-if="fixCommandsData.syncedDeployments?.length > 0" type="success" variant="tonal" density="compact" class="mb-3">
+              {{ fixCommandsData.syncedDeployments.length }} deployment(s) already synced (no action needed)
+            </v-alert>
+            <v-alert v-if="fixCommandsData.failedDeployments?.length > 0" type="error" variant="tonal" density="compact" class="mb-3">
+              {{ fixCommandsData.failedDeployments.length }} deployment(s) in failed health (use failed-subgraph fix)
+            </v-alert>
+            <v-alert v-if="fixCommandsData.unknownDeployments?.length > 0" type="info" variant="tonal" density="compact" class="mb-3">
+              {{ fixCommandsData.unknownDeployments.length }} deployment(s) have unknown status
+            </v-alert>
+            <v-alert v-if="fixCommandsData.behindDeployments?.length === 0 && fixCommandsData.failedDeployments?.length === 0 && fixCommandsData.syncedDeployments?.length === 0" type="info" variant="tonal" density="compact" class="mb-3">
+              No deployment status data available. The poller may not have run yet.
+            </v-alert>
 
-          <!-- Bash Script (primary output) -->
-          <div v-if="fixCommandsData.script" class="mb-4">
-            <div class="d-flex align-center mb-2">
-              <span class="text-subtitle-2">Bash Script</span>
-              <v-spacer></v-spacer>
-              <v-btn size="small" variant="outlined" @click="copyScript">
-                <v-icon start size="small">mdi-content-copy</v-icon>
-                Copy Script
-              </v-btn>
+            <!-- Info box explaining the script workflow -->
+            <v-alert v-if="fixCommandsData.script" type="info" variant="outlined" density="compact" class="mb-3">
+              <div class="text-caption">
+                <strong>Script workflow:</strong>
+                <ol class="pl-4 mt-1 mb-0">
+                  <li>Snapshot block heights, wait 2 min, snapshot again to detect progress</li>
+                  <li>Deployments still advancing = slow sync (skipped)</li>
+                  <li>Stopped deployments diagnosed via <code>graphman info -s</code> (paused/unassigned/failed/inactive = skipped)</li>
+                  <li>Eligible deployments restarted, then rechecked after 10 min</li>
+                </ol>
+              </div>
+            </v-alert>
+
+            <!-- Bash Script -->
+            <div v-if="fixCommandsData.script" class="mb-4">
+              <div class="d-flex align-center mb-2">
+                <span class="text-subtitle-2">Bash Script</span>
+                <v-spacer></v-spacer>
+                <v-btn size="small" variant="outlined" @click="copyScript">
+                  <v-icon start size="small">mdi-content-copy</v-icon>
+                  Copy Script
+                </v-btn>
+              </div>
+              <pre class="fix-script-block">{{ fixCommandsData.script }}</pre>
             </div>
-            <pre class="fix-script-block">{{ fixCommandsData.script }}</pre>
-          </div>
 
-          <!-- Genuine Failures detail -->
-          <div v-if="fixCommandsData.genuineFailures.length > 0">
-            <div class="text-subtitle-2 mb-2">Genuine Failures (not fixable)</div>
-            <v-table density="compact" class="text-caption mb-4">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Deployment</th>
-                  <th>Error</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(f, idx) in fixCommandsData.genuineFailures" :key="idx">
-                  <td>{{ f.name }}</td>
-                  <td style="font-family: monospace; font-size: 0.75rem">{{ f.hash }}</td>
-                  <td class="text-caption" style="max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis" :title="f.error">{{ f.error }}</td>
-                </tr>
-              </tbody>
-            </v-table>
-          </div>
+            <!-- Behind deployments detail table -->
+            <div v-if="fixCommandsData.behindDeployments?.length > 0">
+              <div class="text-subtitle-2 mb-2">Behind Chainhead Deployments</div>
+              <v-table density="compact" class="text-caption mb-4">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Deployment</th>
+                    <th class="text-right">Blocks Behind</th>
+                    <th class="text-right">GRT</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(d, idx) in fixCommandsData.behindDeployments" :key="idx">
+                    <td>{{ d.name }}</td>
+                    <td style="font-family: monospace; font-size: 0.75rem">{{ d.hash }}</td>
+                    <td class="text-right">{{ Number(d.blocksBehind).toLocaleString() }}</td>
+                    <td class="text-right">{{ Number(d.allocatedGRT).toLocaleString() }}</td>
+                  </tr>
+                </tbody>
+              </v-table>
+            </div>
+
+            <!-- Failed deployments (wrong fix type) -->
+            <div v-if="fixCommandsData.failedDeployments?.length > 0">
+              <div class="text-subtitle-2 mb-2">Failed Deployments (not fixable here)</div>
+              <v-table density="compact" class="text-caption mb-4">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Deployment</th>
+                    <th>Error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(f, idx) in fixCommandsData.failedDeployments" :key="idx">
+                    <td>{{ f.name }}</td>
+                    <td style="font-family: monospace; font-size: 0.75rem">{{ f.hash }}</td>
+                    <td class="text-caption" style="max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis" :title="f.error">{{ f.error }}</td>
+                  </tr>
+                </tbody>
+              </v-table>
+            </div>
+          </template>
+
+          <!-- ── Failed Subgraph layout (existing) ── -->
+          <template v-else>
+            <v-alert v-if="fixCommandsData.staleDeployments?.length > 0" type="success" variant="tonal" density="compact" class="mb-3">
+              {{ fixCommandsData.staleDeployments.length }} stale failure(s) can be fixed with graphman rewind
+            </v-alert>
+            <v-alert v-if="fixCommandsData.genuineFailures?.length > 0" type="warning" variant="tonal" density="compact" class="mb-3">
+              {{ fixCommandsData.genuineFailures.length }} genuine failure(s) cannot be fixed by rewind (need subgraph code fixes)
+            </v-alert>
+            <v-alert v-if="fixCommandsData.unknownDeployments?.length > 0" type="info" variant="tonal" density="compact" class="mb-3">
+              {{ fixCommandsData.unknownDeployments.length }} deployment(s) have unknown status (no cached data)
+            </v-alert>
+            <v-alert v-if="!fixCommandsData.staleDeployments?.length && !fixCommandsData.genuineFailures?.length" type="info" variant="tonal" density="compact" class="mb-3">
+              No deployment status data available. The poller may not have run yet.
+            </v-alert>
+
+            <!-- Bash Script -->
+            <div v-if="fixCommandsData.script" class="mb-4">
+              <div class="d-flex align-center mb-2">
+                <span class="text-subtitle-2">Bash Script</span>
+                <v-spacer></v-spacer>
+                <v-btn size="small" variant="outlined" @click="copyScript">
+                  <v-icon start size="small">mdi-content-copy</v-icon>
+                  Copy Script
+                </v-btn>
+              </div>
+              <pre class="fix-script-block">{{ fixCommandsData.script }}</pre>
+            </div>
+
+            <!-- Genuine Failures detail -->
+            <div v-if="fixCommandsData.genuineFailures?.length > 0">
+              <div class="text-subtitle-2 mb-2">Genuine Failures (not fixable)</div>
+              <v-table density="compact" class="text-caption mb-4">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Deployment</th>
+                    <th>Error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(f, idx) in fixCommandsData.genuineFailures" :key="idx">
+                    <td>{{ f.name }}</td>
+                    <td style="font-family: monospace; font-size: 0.75rem">{{ f.hash }}</td>
+                    <td class="text-caption" style="max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis" :title="f.error">{{ f.error }}</td>
+                  </tr>
+                </tbody>
+              </v-table>
+            </div>
+          </template>
         </v-card-text>
         <v-card-text v-else-if="fixCommandsError" class="text-center py-8">
           <v-icon size="large" color="error" class="mb-2">mdi-alert-circle</v-icon>
@@ -1278,6 +1380,11 @@ function isFailedSubgraphRule(ruleId) {
 function isNegativeStakeRule(ruleId) {
   const rule = store.rules.find((r) => r.id === ruleId);
   return rule?.type === 'negative_stake';
+}
+
+function isBehindChainheadRule(ruleId) {
+  const rule = store.rules.find((r) => r.id === ruleId);
+  return rule?.type === 'behind_chainhead';
 }
 
 function isAllocationsToCloseArray(key, value) {
