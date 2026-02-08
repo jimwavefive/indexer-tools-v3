@@ -40,7 +40,7 @@ async function handleFailedSubgraphFix(
   const subgraphs = (metadata?.subgraphs as Array<{ deploymentHash: string; name: string; allocatedGRT: string; errorMessage?: string }>) || [];
 
   if (subgraphs.length === 0) {
-    res.json({ fixType: 'failed_subgraph', staleDeployments: [], genuineFailures: [], commands: [], containerName: '' });
+    res.json({ fixType: 'failed_subgraph', rewindableDeployments: [], deterministicFailures: [], unknownDeployments: [], commands: [], containerName: '' });
     return;
   }
 
@@ -58,9 +58,24 @@ async function handleFailedSubgraphFix(
     return;
   }
 
-  const staleDeployments: Array<{ hash: string; name: string; chainId: string; chainNetwork: string; latestBlock: number; error: string; allocatedGRT: string }> = [];
-  const genuineFailures: Array<{ hash: string; name: string; error: string; allocatedGRT: string }> = [];
+  // Classify deployments using fatalError.deterministic from graph-node:
+  //   rewindable: nondeterministic errors (transient, will likely succeed on retry)
+  //              OR stale (synced past error block, just needs error flag cleared)
+  //   deterministic: deterministic code bugs that will reproduce on rewind
+  const rewindableDeployments: Array<{ hash: string; name: string; chainId: string; chainNetwork: string; latestBlock: number; error: string; reason: string; allocatedGRT: string }> = [];
+  const deterministicFailures: Array<{ hash: string; name: string; error: string; allocatedGRT: string }> = [];
   const unknownDeployments: Array<{ hash: string; name: string; allocatedGRT: string }> = [];
+
+  const networkToChainId = (network: string) =>
+    network === 'mainnet' ? '1'
+    : network === 'arbitrum-one' ? '42161'
+    : network === 'gnosis' ? '100'
+    : network === 'base' ? '8453'
+    : network === 'matic' ? '137'
+    : network === 'optimism' ? '10'
+    : network === 'avalanche' ? '43114'
+    : network === 'celo' ? '42220'
+    : network;
 
   for (const sg of subgraphs) {
     const hash = sg.deploymentHash;
@@ -72,59 +87,59 @@ async function handleFailedSubgraphFix(
       continue;
     }
 
-    const allSynced = status.chains.every((c: any) => {
-      const chainhead = parseInt(c.chainHeadBlock?.number || '0', 10);
-      const latest = parseInt(c.latestBlock?.number || '0', 10);
-      return (chainhead - latest) < 100;
-    });
+    if (status.health !== 'failed') {
+      // Not failed anymore — skip (auto-resolved or healthy)
+      continue;
+    }
 
-    if (status.health === 'failed' && allSynced) {
-      const primaryChain = status.chains[0];
-      const network = primaryChain?.network || 'unknown';
-      const chainId = network === 'mainnet' ? '1'
-        : network === 'arbitrum-one' ? '42161'
-        : network === 'gnosis' ? '100'
-        : network === 'base' ? '8453'
-        : network === 'matic' ? '137'
-        : network === 'optimism' ? '10'
-        : network === 'avalanche' ? '43114'
-        : network === 'celo' ? '42220'
-        : network;
-      const latestBlock = parseInt(primaryChain?.latestBlock?.number || '0', 10);
+    const primaryChain = status.chains?.[0];
+    const network = primaryChain?.network || 'unknown';
+    const chainId = networkToChainId(network);
+    const latestBlock = parseInt(primaryChain?.latestBlock?.number || '0', 10);
+    const errorMsg = status.fatalError?.message?.substring(0, 200) || 'unknown error';
+    const isDeterministic = status.fatalError?.deterministic === true;
+    const isSynced = status.synced === true;
 
-      staleDeployments.push({
+    if (isDeterministic && !isSynced) {
+      // Deterministic error, not synced — code bug, rewind will reproduce the same error
+      deterministicFailures.push({
+        hash,
+        name: sg.name || hash.substring(0, 12),
+        error: errorMsg,
+        allocatedGRT: sg.allocatedGRT,
+      });
+    } else {
+      // Rewindable: nondeterministic (transient error) OR stale (synced past the error block)
+      const reason = !status.fatalError ? 'stale (no fatal error)'
+        : isDeterministic ? 'stale (synced past error block)'
+        : 'nondeterministic (transient error)';
+      rewindableDeployments.push({
         hash,
         name: sg.name || hash.substring(0, 12),
         chainId,
         chainNetwork: network,
         latestBlock,
-        error: status.fatalError?.message?.substring(0, 200) || 'unknown error',
-        allocatedGRT: sg.allocatedGRT,
-      });
-    } else {
-      genuineFailures.push({
-        hash,
-        name: sg.name || hash.substring(0, 12),
-        error: status.fatalError?.message?.substring(0, 200) || (status.health === 'failed' ? 'failed (not synced)' : `health: ${status.health}`),
+        error: errorMsg,
+        reason,
         allocatedGRT: sg.allocatedGRT,
       });
     }
   }
 
-  // Generate graphman rewind commands for stale deployments
+  // Generate graphman rewind commands for rewindable deployments
   const containerName = process.env.GRAPHMAN_CONTAINER_NAME || 'index-node-mgmt-0';
   const rpcService = getChainRpcService();
 
   // Resolve RPC URLs for each chain used
   const chainRpcUrls = new Map<string, string>();
-  for (const d of staleDeployments) {
+  for (const d of rewindableDeployments) {
     if (!chainRpcUrls.has(d.chainId)) {
       const url = rpcService.getRpcUrl(d.chainId);
       chainRpcUrls.set(d.chainId, url || `<RPC_URL_FOR_CHAIN_${d.chainId}>`);
     }
   }
 
-  const commands = staleDeployments.map((d) => {
+  const commands = rewindableDeployments.map((d) => {
     const rewindBlock = d.latestBlock - 1;
     const blockHex = `0x${rewindBlock.toString(16)}`;
     const rpcUrl = chainRpcUrls.get(d.chainId) || `<RPC_URL_FOR_CHAIN_${d.chainId}>`;
@@ -140,7 +155,7 @@ async function handleFailedSubgraphFix(
   });
 
   // Generate a complete bash script that handles everything
-  let script = `#!/bin/bash\n# Auto-generated graphman rewind script for stale failures\n# Generated: ${new Date().toISOString()}\n# Incident: ${incident.id}\n#\n# ${staleDeployments.length} stale deployment(s) to rewind\n# ${genuineFailures.length} genuine failure(s) (not fixable by rewind)\n\nCONTAINER="${containerName}"\nSUCCESS=0\nFAILED=0\nFAILED_LIST=""\n`;
+  let script = `#!/bin/bash\n# Auto-generated graphman rewind script\n# Generated: ${new Date().toISOString()}\n# Incident: ${incident.id}\n#\n# ${rewindableDeployments.length} rewindable deployment(s)\n# ${deterministicFailures.length} deterministic failure(s) (not fixable by rewind)\n\nCONTAINER="${containerName}"\nSUCCESS=0\nFAILED=0\nFAILED_LIST=""\n`;
 
   script += `\nget_block_hash() {
   local rpc_url="$1"
@@ -189,8 +204,8 @@ do_rewind() {
 `;
 
   // Group by chain for efficiency
-  const byChain = new Map<string, typeof staleDeployments>();
-  for (const d of staleDeployments) {
+  const byChain = new Map<string, typeof rewindableDeployments>();
+  for (const d of rewindableDeployments) {
     const key = d.chainId;
     if (!byChain.has(key)) byChain.set(key, []);
     byChain.get(key)!.push(d);
@@ -203,7 +218,7 @@ do_rewind() {
 
     for (const d of deployments) {
       const rewindBlock = d.latestBlock - 1;
-      script += `\n# ${d.name}\necho "Rewinding ${d.hash.substring(0, 12)}... (${d.name}) to block ${rewindBlock}"\nif do_rewind "${rpcUrl}" ${rewindBlock} ${d.hash}; then\n  echo "  Done."\n  SUCCESS=$((SUCCESS + 1))\nelse\n  echo "  FAILED"\n  FAILED=$((FAILED + 1))\n  FAILED_LIST="$FAILED_LIST\\n  - ${d.name} (${d.hash.substring(0, 16)}...)"\nfi\n`;
+      script += `\n# ${d.name} (${d.reason})\necho "Rewinding ${d.hash.substring(0, 12)}... (${d.name}) to block ${rewindBlock}"\nif do_rewind "${rpcUrl}" ${rewindBlock} ${d.hash}; then\n  echo "  Done."\n  SUCCESS=$((SUCCESS + 1))\nelse\n  echo "  FAILED"\n  FAILED=$((FAILED + 1))\n  FAILED_LIST="$FAILED_LIST\\n  - ${d.name} (${d.hash.substring(0, 16)}...)"\nfi\n`;
     }
   }
 
@@ -211,8 +226,8 @@ do_rewind() {
 
   res.json({
     fixType: 'failed_subgraph',
-    staleDeployments,
-    genuineFailures,
+    rewindableDeployments,
+    deterministicFailures,
     unknownDeployments,
     commands,
     script,
