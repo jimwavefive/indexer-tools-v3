@@ -786,16 +786,17 @@
 
           <!-- ── Failed Subgraph layout (existing) ── -->
           <template v-else>
-            <v-alert v-if="fixCommandsData.staleDeployments?.length > 0" type="success" variant="tonal" density="compact" class="mb-3">
-              {{ fixCommandsData.staleDeployments.length }} stale failure(s) can be fixed with graphman rewind
+            <v-alert v-if="fixCommandsData.rewindableDeployments?.length > 0" type="success" variant="tonal" density="compact" class="mb-3">
+              {{ fixCommandsData.rewindableDeployments.length }} deployment(s) can be fixed with graphman rewind
+              <span class="text-caption ml-1">(nondeterministic errors or stale failures)</span>
             </v-alert>
-            <v-alert v-if="fixCommandsData.genuineFailures?.length > 0" type="warning" variant="tonal" density="compact" class="mb-3">
-              {{ fixCommandsData.genuineFailures.length }} genuine failure(s) cannot be fixed by rewind (need subgraph code fixes)
+            <v-alert v-if="fixCommandsData.deterministicFailures?.length > 0" type="warning" variant="tonal" density="compact" class="mb-3">
+              {{ fixCommandsData.deterministicFailures.length }} deterministic failure(s) — rewind will not help (subgraph code bug)
             </v-alert>
             <v-alert v-if="fixCommandsData.unknownDeployments?.length > 0" type="info" variant="tonal" density="compact" class="mb-3">
               {{ fixCommandsData.unknownDeployments.length }} deployment(s) have unknown status (no cached data)
             </v-alert>
-            <v-alert v-if="!fixCommandsData.staleDeployments?.length && !fixCommandsData.genuineFailures?.length" type="info" variant="tonal" density="compact" class="mb-3">
+            <v-alert v-if="!fixCommandsData.rewindableDeployments?.length && !fixCommandsData.deterministicFailures?.length" type="info" variant="tonal" density="compact" class="mb-3">
               No deployment status data available. The poller may not have run yet.
             </v-alert>
 
@@ -812,9 +813,9 @@
               <pre class="fix-script-block">{{ fixCommandsData.script }}</pre>
             </div>
 
-            <!-- Genuine Failures detail -->
-            <div v-if="fixCommandsData.genuineFailures?.length > 0">
-              <div class="text-subtitle-2 mb-2">Genuine Failures (not fixable)</div>
+            <!-- Deterministic Failures detail -->
+            <div v-if="fixCommandsData.deterministicFailures?.length > 0">
+              <div class="text-subtitle-2 mb-2">Deterministic Failures (not fixable by rewind)</div>
               <v-table density="compact" class="text-caption mb-4">
                 <thead>
                   <tr>
@@ -824,7 +825,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(f, idx) in fixCommandsData.genuineFailures" :key="idx">
+                  <tr v-for="(f, idx) in fixCommandsData.deterministicFailures" :key="idx">
                     <td>{{ f.name }}</td>
                     <td style="font-family: monospace; font-size: 0.75rem">{{ f.hash }}</td>
                     <td class="text-caption" style="max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis" :title="f.error">{{ f.error }}</td>
