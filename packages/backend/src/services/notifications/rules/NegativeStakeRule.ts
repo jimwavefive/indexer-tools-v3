@@ -56,6 +56,9 @@ export class NegativeStakeRule implements Rule {
       const deployment = allocation.subgraphDeployment;
       const allocatedGRT = new BigNumber(allocation.allocatedTokens).dividedBy(WEI_PER_ETHER);
 
+      // Zero-GRT allocations exist only for query fees — closing them recovers no stake
+      if (allocatedGRT.isZero()) continue;
+
       let apr = new BigNumber(0);
       if (
         new BigNumber(deployment.stakedTokens).isGreaterThan(0) &&

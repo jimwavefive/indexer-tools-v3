@@ -868,8 +868,8 @@
             <!-- Shortfall summary -->
             <v-alert type="error" variant="tonal" density="compact" class="mb-3">
               Available stake is <strong>{{ Number(negStakeIncident.latest_metadata?.shortfallGRT || 0).toLocaleString() }} GRT negative</strong>.
-              Close {{ negStakeIncident.latest_metadata?.allocationsToClose?.length || 0 }} allocation(s)
-              totalling {{ Number(negStakeIncident.latest_metadata?.totalCloseGRT || 0).toLocaleString() }} GRT to recover.
+              Selected {{ negStakeSelected.size }} of {{ negStakeAllAllocations.length }} allocation(s)
+              totalling {{ negStakeSelectedGRT.toLocaleString() }} GRT to recover.
             </v-alert>
 
             <!-- Recommended closes table -->
@@ -877,6 +877,15 @@
             <v-table density="compact" class="text-caption mb-4">
               <thead>
                 <tr>
+                  <th style="width: 40px">
+                    <v-checkbox
+                      :model-value="negStakeAllSelected"
+                      :indeterminate="negStakeSelected.size > 0 && !negStakeAllSelected"
+                      hide-details
+                      density="compact"
+                      @update:model-value="toggleNegStakeSelectAll"
+                    ></v-checkbox>
+                  </th>
                   <th>Name</th>
                   <th>Deployment</th>
                   <th class="text-right">GRT</th>
@@ -884,7 +893,15 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(a, idx) in negStakeIncident.latest_metadata?.allocationsToClose || []" :key="idx">
+                <tr v-for="(a, idx) in negStakeAllAllocations" :key="idx">
+                  <td>
+                    <v-checkbox
+                      :model-value="negStakeSelected.has(a.allocationId)"
+                      hide-details
+                      density="compact"
+                      @update:model-value="toggleNegStakeRow(a.allocationId)"
+                    ></v-checkbox>
+                  </td>
                   <td>{{ a.name }}</td>
                   <td style="font-family: monospace; font-size: 0.75rem">{{ a.deploymentHash }}</td>
                   <td class="text-right">{{ Number(a.allocatedGRT).toLocaleString() }}</td>
@@ -923,10 +940,11 @@
                 color="primary"
                 size="small"
                 :loading="negStakeAddLoading"
+                :disabled="negStakeSelected.size === 0"
                 @click="addNegStakeCloses"
               >
                 <v-icon start size="small">mdi-plus-circle</v-icon>
-                Add Closes to Queue
+                Add Closes to Queue ({{ negStakeSelected.size }})
               </v-btn>
             </div>
           </template>
@@ -945,7 +963,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useNotificationRulesStore } from '@/store/notificationRules';
 import { useFeatureFlagStore } from '@/store/featureFlags';
@@ -1121,7 +1139,7 @@ function openRuleDialog(rule) {
       type: rule.type,
       enabled: rule.enabled,
       conditions,
-      channels: rule.channels ? [...rule.channels] : [],
+      channels: rule.channelIds ? [...rule.channelIds] : [],
       pollingIntervalMinutes: rule.pollingIntervalMinutes ?? null,
     };
   } else {
@@ -1132,10 +1150,13 @@ function openRuleDialog(rule) {
 }
 
 async function saveRule() {
+  // Transform frontend form → API payload: channels → channelIds
+  const { channels, ...rest } = ruleForm.value;
+  const payload = { ...rest, channelIds: channels || [] };
   if (editingRule.value) {
-    await store.updateRule(editingRule.value.id, ruleForm.value);
+    await store.updateRule(editingRule.value.id, payload);
   } else {
-    await store.createRule(ruleForm.value);
+    await store.createRule(payload);
   }
   ruleDialogOpen.value = false;
 }
@@ -1418,11 +1439,34 @@ function copyScript() {
 // --- Negative Stake Recovery ---
 const negStakeDialogOpen = ref(false);
 const negStakeIncident = ref(null);
+const negStakeSelected = ref(new Set());
 const negStakeQueueActions = ref([]);
 const negStakeQueueLoading = ref(false);
 const negStakeClearLoading = ref(false);
 const negStakeAddLoading = ref(false);
 const negStakeQueueStatus = ref('');
+
+const negStakeAllAllocations = computed(() => (negStakeIncident.value?.latest_metadata?.allocationsToClose || []).filter((a) => Number(a.allocatedGRT) > 0));
+const negStakeAllSelected = computed(() => negStakeAllAllocations.value.length > 0 && negStakeAllAllocations.value.every((a) => negStakeSelected.value.has(a.allocationId)));
+const negStakeSelectedGRT = computed(() => negStakeAllAllocations.value.filter((a) => negStakeSelected.value.has(a.allocationId)).reduce((sum, a) => sum + Number(a.allocatedGRT), 0));
+
+function toggleNegStakeSelectAll() {
+  if (negStakeAllSelected.value) {
+    negStakeSelected.value = new Set();
+  } else {
+    negStakeSelected.value = new Set(negStakeAllAllocations.value.map((a) => a.allocationId));
+  }
+}
+
+function toggleNegStakeRow(allocationId) {
+  const next = new Set(negStakeSelected.value);
+  if (next.has(allocationId)) {
+    next.delete(allocationId);
+  } else {
+    next.add(allocationId);
+  }
+  negStakeSelected.value = next;
+}
 
 const ACTIONS_QUERY = gql`
   query actions($filter: ActionFilter!) {
@@ -1452,6 +1496,8 @@ const DELETE_ACTIONS_MUTATION = gql`
 
 async function openNegativeStakeRecovery(item) {
   negStakeIncident.value = item;
+  // Use the filtered computed (excludes zero-GRT) for initial selection
+  negStakeSelected.value = new Set(negStakeAllAllocations.value.map((a) => a.allocationId));
   negStakeQueueActions.value = [];
   negStakeQueueStatus.value = '';
   negStakeDialogOpen.value = true;
@@ -1508,11 +1554,13 @@ async function clearNegStakeQueue() {
 async function addNegStakeCloses() {
   const allocs = negStakeIncident.value?.latest_metadata?.allocationsToClose;
   if (!allocs?.length) return;
+  const selected = allocs.filter((a) => negStakeSelected.value.has(a.allocationId));
+  if (!selected.length) return;
   negStakeAddLoading.value = true;
   try {
     const client = accountStore.getAgentConnectClient;
     const protocolNetwork = chainStore.getActiveChain?.id || 'arbitrum-one';
-    const actions = allocs.map((a) => ({
+    const actions = selected.map((a) => ({
       status: 'queued',
       type: 'unallocate',
       deploymentID: a.deploymentHash,
