@@ -64,4 +64,5 @@ export interface RuleConfig {
   conditions: Record<string, unknown>;
   pollingIntervalMinutes?: number | null; // Per-rule polling interval (null = use global)
   lastPolledAt?: string | null; // Timestamp of last evaluation
+  channelIds?: string[]; // Which channels this rule sends to (empty = silent, no notifications)
 }

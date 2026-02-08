@@ -371,15 +371,16 @@ export class RuleScheduler {
       return { triggered: false, notificationCount: 0, sent: false, filterSummary: result.filterSummary };
     }
 
-    // Send via enabled channels
+    // Send via channels assigned to this rule (must also be globally enabled)
     const channelConfigs = await this.store.getChannels();
+    const ruleChannelIds = ruleConfig.channelIds ?? [];
     const channels: Channel[] = channelConfigs
-      .filter((c) => c.enabled)
+      .filter((c) => c.enabled && (ruleChannelIds.length === 0 || ruleChannelIds.includes(c.id)))
       .map((c) => this.engine.instantiateChannel(c))
       .filter((c): c is Channel => c !== null);
 
     let sent = false;
-    if (channels.length > 0) {
+    if (channels.length > 0 && ruleChannelIds.length > 0) {
       const summaries = result.filterSummary ? new Map([[rule.id, result.filterSummary]]) : undefined;
       for (const channel of channels) {
         try {

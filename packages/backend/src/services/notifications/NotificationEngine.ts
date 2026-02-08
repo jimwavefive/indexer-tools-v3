@@ -107,11 +107,17 @@ export class NotificationEngine {
     const now = new Date();
     const nowIso = now.toISOString();
 
+    // Build per-rule channel assignment lookup
+    const ruleChannelMap = new Map<string, string[]>();
+    for (const rc of ruleConfigs) {
+      ruleChannelMap.set(rc.id, rc.channelIds ?? []);
+    }
+
     // Track which rule:target combos fired this cycle for auto-resolution
     const firedKeys = new Set<string>();
 
     // Phase 1: Evaluate rules, manage incidents, decide what to send
-    const toSend: Array<{ notification: Notification; incidentId: string }> = [];
+    const toSend: Array<{ notification: Notification; incidentId: string; ruleChannelIds: string[] }> = [];
     const filterSummaries = new Map<string, string>();
 
     for (const rule of rules) {
@@ -128,7 +134,11 @@ export class NotificationEngine {
         const incidentKey = `${rule.id}:${targetKey}`;
         firedKeys.add(incidentKey);
 
-        const sentChannelIds = channels.map((c) => c.id);
+        const ruleChIds = ruleChannelMap.get(rule.id) ?? [];
+        // Only channels that are both assigned to this rule AND globally enabled
+        const effectiveChannelIds = ruleChIds.length > 0
+          ? channels.filter((c) => ruleChIds.includes(c.id)).map((c) => c.id)
+          : [];
         const existing = this.store.getActiveIncident(rule.id, targetKey);
 
         if (existing) {
@@ -140,7 +150,7 @@ export class NotificationEngine {
             latest_message: notification.message,
             latest_metadata: (notification.metadata || {}) as Record<string, unknown>,
             severity: notification.severity,
-            channel_ids: sentChannelIds,
+            channel_ids: effectiveChannelIds,
           });
 
           this.onIncidentChange?.({
@@ -159,8 +169,10 @@ export class NotificationEngine {
             continue;
           }
 
-          // Re-send notification on every evaluation (polling interval controls frequency)
-          toSend.push({ notification, incidentId: existing.id });
+          // Only queue for sending if rule has channels assigned
+          if (effectiveChannelIds.length > 0) {
+            toSend.push({ notification, incidentId: existing.id, ruleChannelIds: effectiveChannelIds });
+          }
         } else {
           // Create new incident
           const incidentId = generateId();
@@ -180,7 +192,7 @@ export class NotificationEngine {
             latest_title: notification.title,
             latest_message: notification.message,
             latest_metadata: (notification.metadata || {}) as Record<string, unknown>,
-            channel_ids: sentChannelIds,
+            channel_ids: effectiveChannelIds,
           });
 
           this.onIncidentChange?.({
@@ -194,18 +206,27 @@ export class NotificationEngine {
             timestamp: nowIso,
           });
 
-          toSend.push({ notification, incidentId });
+          // Only queue for sending if rule has channels assigned
+          if (effectiveChannelIds.length > 0) {
+            toSend.push({ notification, incidentId, ruleChannelIds: effectiveChannelIds });
+          }
         }
       }
     }
 
-    // Phase 2: Send batch to each channel
+    // Phase 2: Send batch to each channel (filtered by per-rule channel assignment)
     if (toSend.length > 0 && channels.length > 0) {
-      const notifications = toSend.map((s) => s.notification);
       const summaries = filterSummaries.size > 0 ? filterSummaries : undefined;
       for (const channel of channels) {
+        // Only include notifications whose rule targets this channel
+        const channelNotifications = toSend
+          .filter((s) => s.ruleChannelIds.includes(channel.id))
+          .map((s) => s.notification);
+
+        if (channelNotifications.length === 0) continue;
+
         try {
-          await channel.sendBatch(notifications, summaries);
+          await channel.sendBatch(channelNotifications, summaries);
         } catch (err) {
           console.error(
             `Failed to send batch via channel "${channel.name}" (${channel.id}):`,
@@ -217,14 +238,13 @@ export class NotificationEngine {
 
     // Phase 3: Create history records and update last_notified_at
     const records: HistoryRecord[] = [];
-    const sentChannelIds = channels.map((c) => c.id);
 
-    for (const { notification, incidentId } of toSend) {
+    for (const { notification, incidentId, ruleChannelIds } of toSend) {
       const record: HistoryRecord = {
         id: generateId(),
         incidentId,
         notification,
-        channelIds: channels.length > 0 ? sentChannelIds : [],
+        channelIds: ruleChannelIds,
         timestamp: nowIso,
       };
 

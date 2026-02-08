@@ -666,6 +666,7 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
         enabled: body.enabled ?? true,
         conditions: body.conditions ?? {},
         pollingIntervalMinutes: body.pollingIntervalMinutes ?? null,
+        channelIds: body.channelIds ?? [],
       };
 
       const rules = await store.getRules();

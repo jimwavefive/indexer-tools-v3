@@ -221,6 +221,14 @@ export class SqliteStore {
       // Column already exists — ignore
     }
 
+    // Migration: add channel_ids column to rules (per-rule channel assignment)
+    try {
+      this.db.exec("ALTER TABLE rules ADD COLUMN channel_ids TEXT NOT NULL DEFAULT '[]'");
+      console.log('Migration: added channel_ids column to rules');
+    } catch {
+      // Column already exists — ignore
+    }
+
     // Agent infrastructure tables
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS conversations (
@@ -371,6 +379,7 @@ export class SqliteStore {
       id: string; name: string; type: string; enabled: number; conditions: string;
       polling_interval_minutes: number | null;
       last_polled_at: string | null;
+      channel_ids: string;
     }>;
     return rows.map((r) => ({
       id: r.id,
@@ -380,12 +389,13 @@ export class SqliteStore {
       conditions: JSON.parse(r.conditions),
       pollingIntervalMinutes: r.polling_interval_minutes,
       lastPolledAt: r.last_polled_at,
+      channelIds: JSON.parse(r.channel_ids || '[]'),
     }));
   }
 
   async saveRules(rules: RuleConfig[]): Promise<void> {
     const insert = this.db.prepare(
-      'INSERT OR REPLACE INTO rules (id, name, type, enabled, conditions, polling_interval_minutes, last_polled_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT OR REPLACE INTO rules (id, name, type, enabled, conditions, polling_interval_minutes, last_polled_at, channel_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     );
     const tx = this.db.transaction(() => {
       this.db.prepare('DELETE FROM rules').run();
@@ -398,6 +408,7 @@ export class SqliteStore {
           JSON.stringify(r.conditions),
           r.pollingIntervalMinutes ?? null,
           r.lastPolledAt ?? null,
+          JSON.stringify(r.channelIds ?? []),
         );
       }
     });
