@@ -207,7 +207,7 @@ function statusCheckFilter(row: any, _columnId: string, filterValue: string) {
   const hs = original.healthStatus as string;
   switch (filterValue) {
     case 'Closeable':
-      return hs === 'Synced' || hs === 'Failed (Deterministic)';
+      return hs === 'Synced' || hs === 'Failed DET';
     case 'Synced':
       return hs === 'Synced';
     case 'Syncing':
@@ -215,9 +215,9 @@ function statusCheckFilter(row: any, _columnId: string, filterValue: string) {
     case 'Failed':
       return hs.startsWith('Failed');
     case 'Deterministic':
-      return hs === 'Failed (Deterministic)';
+      return hs === 'Failed DET';
     case 'Non-deterministic':
-      return hs === 'Failed (Non-deterministic)';
+      return hs === 'Failed NONDET';
     default:
       return true;
   }

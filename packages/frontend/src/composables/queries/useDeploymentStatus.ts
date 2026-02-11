@@ -46,10 +46,10 @@ function enrichStatus(status: DeploymentStatus): EnrichedDeploymentStatus {
   let statusColor: string;
 
   if (status.health === 'failed' && status.fatalError && !status.fatalError.deterministic) {
-    statusLabel = 'Failed (Non-deterministic)';
+    statusLabel = 'Failed NONDET';
     statusColor = 'yellow';
   } else if (status.health === 'failed' && status.fatalError?.deterministic) {
-    statusLabel = 'Failed (Deterministic)';
+    statusLabel = 'Failed DET';
     statusColor = 'red';
   } else if (status.health === 'healthy' && status.synced) {
     statusLabel = 'Synced';
