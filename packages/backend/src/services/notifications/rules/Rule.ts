@@ -1,0 +1,58 @@
+import type { Allocation, RuleConfig, Notification } from '@indexer-tools/shared';
+
+export interface DeploymentStatus {
+  subgraph: string; // deployment IPFS hash
+  health: 'healthy' | 'unhealthy' | 'failed';
+  synced: boolean;
+  fatalError?: { message: string; handler: string | null; deterministic: boolean };
+  chains: Array<{
+    network: string;
+    chainHeadBlock: { number: string };
+    latestBlock: { number: string };
+  }>;
+}
+
+export interface NetworkDataSnapshot {
+  totalTokensSignalled: string;
+  networkGRTIssuancePerBlock: string;
+  totalSupply: string;
+  currentEpoch: number;
+  totalTokensAllocated: string;
+  maxThawingPeriod: number;
+}
+
+export interface IndexerData {
+  tokenCapacity: string;   // Wei
+  allocatedTokens: string; // Wei
+  stakedTokens: string;    // Wei
+  availableStake: string;  // Wei (can be negative)
+}
+
+export interface RuleContext {
+  allocations: Allocation[];
+  networkData: NetworkDataSnapshot;
+  previousState: PreviousState;
+  deploymentStatuses?: Map<string, DeploymentStatus>;
+  indexer?: IndexerData;
+}
+
+export interface PreviousState {
+  allocations: Allocation[];
+}
+
+export interface RuleResult {
+  triggered: boolean;
+  notifications: Notification[];
+  filterSummary?: string;
+}
+
+export interface Rule {
+  id: string;
+  name: string;
+  type: string;
+  enabled: boolean;
+  conditions: Record<string, unknown>;
+  evaluate(context: RuleContext): RuleResult;
+}
+
+export type { RuleConfig };
