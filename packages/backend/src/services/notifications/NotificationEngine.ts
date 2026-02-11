@@ -111,13 +111,20 @@ export class NotificationEngine {
       // If groupIncidents is enabled, merge all notifications into one grouped notification
       let notifications = result.notifications;
       if (ruleConfig?.groupIncidents && notifications.length > 0) {
+        // Track original per-allocation target keys so pre-existing individual
+        // incidents aren't auto-resolved when grouping is toggled on
+        for (const origNotification of notifications) {
+          const { key: origKey } = deriveTargetKey(rule.id, origNotification);
+          firedKeys.add(`${rule.id}:${origKey}`);
+        }
+
         const allocations = notifications.map((n) => ({
           ...n.metadata,
           title: n.title,
         }));
         const grouped: Notification = {
           title: `${notifications.length} ${ruleConfig.name || rule.id} alerts`,
-          message: notifications[0].message,
+          message: `${notifications.length} allocations triggered ${ruleConfig.name || rule.id}.`,
           severity: notifications.reduce(
             (worst, n) =>
               n.severity === 'critical' ? 'critical' : n.severity === 'warning' && worst !== 'critical' ? 'warning' : worst,
@@ -128,6 +135,7 @@ export class NotificationEngine {
           metadata: {
             allocations,
             count: notifications.length,
+            ruleType: ruleConfig.type,
           },
         };
         notifications = [grouped];

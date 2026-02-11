@@ -129,8 +129,30 @@
                       </tbody>
                     </table>
                   </div>
+                  <!-- Grouped allocations (from groupIncidents) -->
+                  <div v-if="hasGroupedAllocations(row.original)" class="expanded-section">
+                    <h4>Grouped Allocations ({{ getGroupedAllocations(row.original).length }})</h4>
+                    <table class="detail-table">
+                      <thead>
+                        <tr>
+                          <th>Name</th>
+                          <th>Deployment</th>
+                          <th>GRT</th>
+                          <th>Epochs</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(allo, i) in getGroupedAllocations(row.original)" :key="i">
+                          <td>{{ allo.subgraphName || allo.title || '\u2014' }}</td>
+                          <td class="mono">{{ truncateHash(allo.deploymentIpfsHash || '') }}</td>
+                          <td>{{ formatNumber(allo.allocatedGRT) }}</td>
+                          <td>{{ allo.epochDuration ?? '\u2014' }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                   <!-- Generic metadata fallback -->
-                  <div v-if="!hasAllocationsToClose(row.original) && !hasSubgraphs(row.original) && hasMetadata(row.original)" class="expanded-section">
+                  <div v-if="!hasAllocationsToClose(row.original) && !hasSubgraphs(row.original) && !hasGroupedAllocations(row.original) && hasMetadata(row.original)" class="expanded-section">
                     <h4>Details</h4>
                     <div class="metadata-grid">
                       <template v-for="(value, key) in getVisibleMetadata(row.original)" :key="key">
@@ -190,7 +212,7 @@ defineEmits<{
 }>();
 
 const FIXABLE_RULE_TYPES = new Set(['behind_chainhead', 'behind_chainhead_allocated', 'failed_subgraph', 'failed_subgraph_allocated']);
-const HIDDEN_META_KEYS = new Set(['ruleType', 'ruleName', 'ruleId']);
+const HIDDEN_META_KEYS = new Set(['ruleType', 'ruleName', 'ruleId', 'allocations', 'count']);
 
 function isFixable(incident: IncidentRecord): boolean {
   const rule = props.rules.find((r) => r.id === incident.rule_id);
@@ -214,6 +236,15 @@ function hasSubgraphs(incident: IncidentRecord): boolean {
 
 function getSubgraphs(incident: IncidentRecord): Record<string, unknown>[] {
   return (incident.latest_metadata?.subgraphs as Record<string, unknown>[]) ?? [];
+}
+
+function hasGroupedAllocations(incident: IncidentRecord): boolean {
+  const meta = incident.latest_metadata;
+  return Array.isArray(meta?.allocations) && meta.allocations.length > 0;
+}
+
+function getGroupedAllocations(incident: IncidentRecord): Record<string, unknown>[] {
+  return (incident.latest_metadata?.allocations as Record<string, unknown>[]) ?? [];
 }
 
 function hasMetadata(incident: IncidentRecord): boolean {

@@ -185,25 +185,37 @@ export class DiscordChannel implements Channel {
     if (notification.metadata) {
       const meta = notification.metadata;
 
-      // Grouped notification — render allocations as a table
+      // Grouped notification — render allocations as a table using rule-specific columns
       if (Array.isArray(meta.allocations) && meta.allocations.length > 0) {
         const allocs = meta.allocations as Array<Record<string, unknown>>;
-        const rows = allocs.map((a) => {
-          const name = (a.subgraphName as string) || 'Unknown';
-          const epochs = a.epochDuration !== undefined ? String(a.epochDuration) : '?';
-          const threshold = a.thresholdEpochs !== undefined ? String(a.thresholdEpochs) : '?';
-          return { name, epochs, threshold };
+        const ruleType = meta.ruleType as string | undefined;
+        // Map ruleType (snake_case config) to ruleId (kebab-case for RULE_TABLE_SPECS)
+        const ruleIdForSpec = ruleType?.replace(/_/g, '-') ?? notification.ruleId;
+        const spec = RULE_TABLE_SPECS[ruleIdForSpec];
+
+        // Build rows: name + dynamic columns from the spec
+        const headers = ['Name', ...(spec?.columns.map((c) => c.header) ?? [])];
+        const tableRows = allocs.map((a) => {
+          const name = (a.subgraphName as string) || (a.title as string) || 'Unknown';
+          const cells = [name];
+          if (spec) {
+            // Wrap allocation metadata as a pseudo-Notification for spec formatters
+            const pseudo = { metadata: a } as Notification;
+            for (const col of spec.columns) {
+              cells.push(col.format(pseudo));
+            }
+          }
+          return cells;
         });
 
-        const nameW = Math.max(4, ...rows.map((r) => r.name.length));
-        const epochW = Math.max(6, ...rows.map((r) => r.epochs.length));
-        const threshW = Math.max(9, ...rows.map((r) => r.threshold.length));
+        const colWidths = headers.map((h, i) =>
+          Math.max(h.length, ...tableRows.map((r) => r[i].length)),
+        );
 
-        let table = '```\n';
-        table += `${'Name'.padEnd(nameW)}  ${'Epochs'.padStart(epochW)}  ${'Threshold'.padStart(threshW)}\n`;
-        table += '\u2500'.repeat(nameW + epochW + threshW + 4) + '\n';
-        for (const row of rows) {
-          table += `${row.name.padEnd(nameW)}  ${row.epochs.padStart(epochW)}  ${row.threshold.padStart(threshW)}\n`;
+        const hdrLine = headers.map((h, i) => (i === 0 ? h.padEnd(colWidths[i]) : h.padStart(colWidths[i]))).join('  ');
+        let table = '```\n' + hdrLine + '\n' + '\u2500'.repeat(hdrLine.length) + '\n';
+        for (const row of tableRows) {
+          table += row.map((c, i) => (i === 0 ? c.padEnd(colWidths[i]) : c.padStart(colWidths[i]))).join('  ') + '\n';
         }
         table += '```';
         description = table;
@@ -281,9 +293,29 @@ export class DiscordChannel implements Channel {
         description += msg;
         shownCount++;
       } else {
-        const rows = items.map((item) => {
+        // Expand grouped notifications into individual pseudo-notifications
+        const expandedItems: Notification[] = [];
+        for (const item of items) {
+          if (Array.isArray(item.metadata?.allocations) && (item.metadata.allocations as unknown[]).length > 0) {
+            // Grouped notification — expand each allocation into its own pseudo-notification
+            for (const alloc of item.metadata.allocations as Array<Record<string, unknown>>) {
+              expandedItems.push({
+                title: (alloc.title as string) || '',
+                message: (alloc.subgraphName as string) || 'Unknown',
+                severity: item.severity,
+                timestamp: item.timestamp,
+                ruleId: item.ruleId,
+                metadata: alloc,
+              });
+            }
+          } else {
+            expandedItems.push(item);
+          }
+        }
+
+        const rows = expandedItems.map((item) => {
           const nameMatch = item.message.match(/\*\*(.+?)\*\*/);
-          const name = nameMatch ? nameMatch[1] : 'Unknown';
+          const name = nameMatch ? nameMatch[1] : (item.metadata?.subgraphName as string) || 'Unknown';
           const cells: string[] = [name];
           if (tableSpec) {
             for (const col of tableSpec.columns) {
