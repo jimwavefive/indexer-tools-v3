@@ -192,10 +192,8 @@ function numberRangeFilter(row: any, columnId: string, filterValue: [number?, nu
 const rowSelection = ref<RowSelectionState>({});
 
 watch(rowSelection, (val) => {
-  const selectedIds = Object.keys(val)
-    .filter((k) => val[k])
-    .map((idx) => props.data[parseInt(idx)]?.id)
-    .filter(Boolean);
+  // Keys ARE allocation IDs (from getRowId), not numeric indices
+  const selectedIds = Object.keys(val).filter((k) => val[k]);
   emit('update:selected', selectedIds);
 }, { deep: true });
 

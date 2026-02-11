@@ -20,7 +20,7 @@ const DEFAULT_SUBGRAPH_COLUMNS: ColumnSetting[] = [
   { id: 'status', title: 'Status', visible: true },
   { id: 'name', title: 'Name', visible: true },
   { id: 'network', title: 'Network', visible: true },
-  { id: 'createdAt', title: 'Created', visible: false },
+  { id: 'createdAt', title: 'Created', visible: true },
   { id: 'apr', title: 'Current APR', visible: true },
   { id: 'newApr', title: 'New APR', visible: true },
   { id: 'maxAllo', title: 'Max Allocation', visible: false },

@@ -6,7 +6,7 @@ export const useAppStore = defineStore('app', () => {
     (localStorage.getItem('theme') as 'dark' | 'light') || 'dark',
   );
   const autoRefreshInterval = ref<number>(
-    parseInt(localStorage.getItem('autoRefreshInterval') || '0', 10),
+    parseInt(localStorage.getItem('autoRefreshInterval') || '300000', 10),
   );
   const sidebarOpen = ref(false);
 

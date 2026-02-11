@@ -161,10 +161,8 @@ function numberRangeFilter(row: any, columnId: string, filterValue: [number?, nu
 const rowSelection = ref<RowSelectionState>({});
 
 watch(rowSelection, (val) => {
-  const selectedHashes = Object.keys(val)
-    .filter((k) => val[k])
-    .map((idx) => props.data[parseInt(idx)]?.ipfsHash)
-    .filter(Boolean);
+  // Keys ARE ipfsHash values (from getRowId), not numeric indices
+  const selectedHashes = Object.keys(val).filter((k) => val[k]);
   emit('update:selected', selectedHashes);
 }, { deep: true });
 
