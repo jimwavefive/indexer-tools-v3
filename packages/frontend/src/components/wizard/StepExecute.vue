@@ -1,64 +1,315 @@
 <template>
   <div class="step-execute">
-    <div v-if="!actionsQueueCommands && !indexingRuleCommands" class="empty-hint">
+    <div v-if="!actionsQueueCommands && !indexingRuleCommands && actionInputs.length === 0" class="empty-hint">
       No commands to execute. Select allocations to close in Step 1 and/or subgraphs to open in Step 3.
     </div>
     <template v-else>
-      <div class="command-section">
-        <div class="section-header">
-          <h3>Action Queue Commands</h3>
-          <Button
-            label="Copy"
-            icon="pi pi-copy"
-            severity="secondary"
-            size="small"
-            @click="copyToClipboard(actionsQueueCommands)"
-          />
+      <!-- Agent API section (primary) -->
+      <div v-if="isConnected" class="agent-section">
+        <div class="agent-bar">
+          <span class="agent-label">Agent connected:</span>
+          <span class="agent-url">{{ agentEndpoint }}</span>
         </div>
-        <Textarea
-          :model-value="actionsQueueCommands"
-          readonly
-          auto-resize
-          :rows="8"
-          class="command-textarea"
-        />
+
+        <!-- Queue button -->
+        <div class="queue-row">
+          <Button
+            label="Queue Actions"
+            icon="pi pi-send"
+            size="small"
+            :disabled="actionInputs.length === 0 || loading"
+            :loading="loading"
+            @click="handleQueueActions"
+          />
+          <span class="queue-hint" v-if="actionInputs.length > 0">
+            {{ actionInputs.length }} action{{ actionInputs.length !== 1 ? 's' : '' }} to queue
+          </span>
+        </div>
+
+        <!-- Actions table -->
+        <div v-if="actions.length > 0" class="actions-table-section">
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr v-for="headerGroup in table.getHeaderGroups()" :key="headerGroup.id">
+                  <th class="th-cell" style="width: 40px">
+                    <Checkbox
+                      :modelValue="table.getIsAllRowsSelected()"
+                      :indeterminate="table.getIsSomeRowsSelected()"
+                      @update:modelValue="table.toggleAllRowsSelected()"
+                      :binary="true"
+                    />
+                  </th>
+                  <th
+                    v-for="header in headerGroup.headers"
+                    :key="header.id"
+                    :style="{ width: `${header.getSize()}px` }"
+                    class="th-cell"
+                  >
+                    <FlexRender :render="header.column.columnDef.header" :props="header.getContext()" />
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in rows" :key="row.id" class="data-row">
+                  <td class="td-cell">
+                    <Checkbox
+                      :modelValue="row.getIsSelected()"
+                      @update:modelValue="row.toggleSelected()"
+                      :binary="true"
+                    />
+                  </td>
+                  <td v-for="cell in row.getVisibleCells()" :key="cell.id" class="td-cell">
+                    <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Action buttons -->
+          <div class="action-buttons">
+            <Button
+              label="Approve"
+              icon="pi pi-check"
+              severity="success"
+              size="small"
+              :disabled="selectedIds.length === 0"
+              @click="confirmAction = 'approve'"
+            />
+            <Button
+              label="Cancel"
+              icon="pi pi-ban"
+              severity="warn"
+              size="small"
+              :disabled="selectedIds.length === 0"
+              @click="confirmAction = 'cancel'"
+            />
+            <Button
+              label="Delete"
+              icon="pi pi-trash"
+              severity="danger"
+              size="small"
+              :disabled="selectedIds.length === 0"
+              @click="confirmAction = 'delete'"
+            />
+            <div class="action-spacer" />
+            <Button
+              label="Execute Approved"
+              icon="pi pi-play"
+              size="small"
+              @click="confirmAction = 'execute'"
+            />
+          </div>
+        </div>
+
+        <!-- Errors -->
+        <div v-if="errors.length > 0" class="errors-section">
+          <div v-for="(err, i) in errors" :key="i" class="error-item">{{ err }}</div>
+        </div>
+      </div>
+      <div v-else class="no-agent-hint">
+        Connect to the indexer agent in Settings &rarr; Accounts to queue actions directly.
       </div>
 
-      <div class="command-section">
-        <div class="section-header">
-          <h3>Indexing Rule Commands</h3>
-          <Button
-            label="Copy"
-            icon="pi pi-copy"
-            severity="secondary"
-            size="small"
-            @click="copyToClipboard(indexingRuleCommands)"
+      <!-- CLI commands (collapsible fallback) -->
+      <details class="cli-section">
+        <summary class="cli-summary">CLI Commands</summary>
+        <div class="command-section">
+          <div class="section-header">
+            <h3>Action Queue Commands</h3>
+            <Button
+              label="Copy"
+              icon="pi pi-copy"
+              severity="secondary"
+              size="small"
+              @click="copyToClipboard(actionsQueueCommands)"
+            />
+          </div>
+          <Textarea
+            :model-value="actionsQueueCommands"
+            readonly
+            auto-resize
+            :rows="6"
+            class="command-textarea"
           />
         </div>
-        <Textarea
-          :model-value="indexingRuleCommands"
-          readonly
-          auto-resize
-          :rows="8"
-          class="command-textarea"
-        />
-      </div>
+
+        <div class="command-section">
+          <div class="section-header">
+            <h3>Indexing Rule Commands</h3>
+            <Button
+              label="Copy"
+              icon="pi pi-copy"
+              severity="secondary"
+              size="small"
+              @click="copyToClipboard(indexingRuleCommands)"
+            />
+          </div>
+          <Textarea
+            :model-value="indexingRuleCommands"
+            readonly
+            auto-resize
+            :rows="6"
+            class="command-textarea"
+          />
+        </div>
+      </details>
     </template>
+
+    <!-- Confirmation dialog -->
+    <Dialog
+      :visible="!!confirmAction"
+      @update:visible="confirmAction = null"
+      :header="confirmHeaders[confirmAction ?? 'approve']"
+      modal
+      :style="{ width: '24rem' }"
+    >
+      <p>
+        <template v-if="confirmAction === 'execute'">
+          Are you sure you want to execute all approved actions?
+        </template>
+        <template v-else>
+          Are you sure you want to {{ confirmAction }} {{ selectedIds.length }} selected action{{ selectedIds.length !== 1 ? 's' : '' }}?
+        </template>
+      </p>
+      <template #footer>
+        <Button label="Back" severity="secondary" text @click="confirmAction = null" />
+        <Button :label="confirmHeaders[confirmAction ?? 'approve']" @click="executeConfirmedAction" />
+      </template>
+    </Dialog>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref, computed } from 'vue';
+import {
+  useVueTable,
+  createColumnHelper,
+  getCoreRowModel,
+  FlexRender,
+} from '@tanstack/vue-table';
+import type { RowSelectionState } from '@tanstack/vue-table';
 import Button from 'primevue/button';
 import Textarea from 'primevue/textarea';
+import Checkbox from 'primevue/checkbox';
+import Dialog from 'primevue/dialog';
+import {
+  useAgentActions,
+  type AgentAction,
+  type ActionInput,
+} from '../../composables/queries/useAgentActions';
 
-defineProps<{
+const props = defineProps<{
   actionsQueueCommands: string;
   indexingRuleCommands: string;
+  actionInputs: ActionInput[];
 }>();
+
+const {
+  actions,
+  loading,
+  errors,
+  isConnected,
+  agentEndpoint,
+  fetchActions,
+  approveActions,
+  cancelActions,
+  deleteActions,
+  executeApproved,
+  queueActions,
+} = useAgentActions();
+
+const confirmAction = ref<string | null>(null);
+
+const confirmHeaders: Record<string, string> = {
+  approve: 'Approve Actions',
+  cancel: 'Cancel Actions',
+  delete: 'Delete Actions',
+  execute: 'Execute Approved Actions',
+};
+
+// Table setup
+const rowSelection = ref<RowSelectionState>({});
+
+const selectedIds = computed(() => {
+  const selectedRows = table.getSelectedRowModel().rows;
+  return selectedRows.map((r) => r.original.id);
+});
+
+function truncateHash(hash: string): string {
+  if (!hash || hash.length <= 14) return hash || '\u2014';
+  return hash.slice(0, 6) + '...' + hash.slice(-4);
+}
+
+const colHelper = createColumnHelper<AgentAction>();
+
+const columns = [
+  colHelper.accessor('id', { header: 'ID', size: 50 }),
+  colHelper.accessor('status', { header: 'Status', size: 80 }),
+  colHelper.accessor('type', { header: 'Type', size: 90 }),
+  colHelper.accessor('amount', { header: 'Amount', size: 90 }),
+  colHelper.accessor('deploymentID', {
+    header: 'Deployment',
+    size: 150,
+    enableSorting: false,
+    cell: (info) => truncateHash(info.getValue()),
+  }),
+  colHelper.accessor('allocationID', {
+    header: 'Allocation',
+    size: 130,
+    enableSorting: false,
+    cell: (info) => truncateHash(info.getValue()),
+  }),
+  colHelper.accessor('failureReason', {
+    header: 'Failure',
+    size: 100,
+    cell: (info) => info.getValue() || '',
+  }),
+];
+
+const table = useVueTable({
+  get data() { return actions.value; },
+  columns,
+  state: {
+    get rowSelection() { return rowSelection.value; },
+  },
+  onRowSelectionChange: (updater) => {
+    rowSelection.value = typeof updater === 'function' ? updater(rowSelection.value) : updater;
+  },
+  getRowId: (row) => row.id,
+  enableRowSelection: true,
+  getCoreRowModel: getCoreRowModel(),
+});
+
+const rows = computed(() => table.getRowModel().rows);
+
+async function handleQueueActions() {
+  await queueActions(props.actionInputs);
+}
+
+async function executeConfirmedAction() {
+  const action = confirmAction.value;
+  confirmAction.value = null;
+
+  if (action === 'approve') {
+    await approveActions(selectedIds.value);
+  } else if (action === 'cancel') {
+    await cancelActions(selectedIds.value);
+  } else if (action === 'delete') {
+    await deleteActions(selectedIds.value);
+  } else if (action === 'execute') {
+    await executeApproved();
+  }
+  rowSelection.value = {};
+}
 
 function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text);
 }
+
+// Auto-fetch existing actions if connected
+if (isConnected.value) fetchActions();
 </script>
 
 <style scoped>
@@ -68,8 +319,137 @@ function copyToClipboard(text: string) {
   gap: 1.5rem;
 }
 
+.agent-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.agent-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--app-table-header-bg);
+  border-radius: 6px;
+  font-size: 0.8rem;
+}
+
+.agent-label {
+  font-weight: 600;
+}
+
+.agent-url {
+  color: var(--p-text-muted-color);
+  font-family: monospace;
+}
+
+.queue-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.queue-hint {
+  font-size: 0.8rem;
+  color: var(--p-text-muted-color);
+}
+
+.no-agent-hint {
+  font-size: 0.85rem;
+  color: var(--p-text-muted-color);
+  padding: 0.75rem;
+  border: 1px dashed var(--app-surface-border);
+  border-radius: 6px;
+  text-align: center;
+}
+
+.actions-table-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.table-scroll {
+  border: 1px solid var(--app-surface-border);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.th-cell {
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+  border-bottom: 2px solid var(--app-surface-border-strong);
+  background: var(--app-table-bg);
+}
+
+.td-cell {
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--app-surface-border);
+  white-space: nowrap;
+}
+
+.data-row:hover {
+  background: var(--app-table-row-hover);
+}
+
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.action-spacer {
+  flex: 1;
+}
+
+.errors-section {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--p-red-200);
+  border-radius: 6px;
+}
+
+.error-item {
+  font-size: 0.8rem;
+  color: var(--p-red-600);
+  word-break: break-all;
+}
+
+/* CLI collapsible section */
+.cli-section {
+  border: 1px solid var(--app-surface-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.cli-summary {
+  padding: 0.6rem 0.75rem;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  background: var(--app-table-header-bg);
+  user-select: none;
+}
+
+.cli-section[open] .cli-summary {
+  border-bottom: 1px solid var(--app-surface-border);
+}
+
+.command-section {
+  padding: 0.75rem;
+}
+
 .command-section h3 {
   margin: 0;
+  font-size: 0.9rem;
 }
 
 .section-header {

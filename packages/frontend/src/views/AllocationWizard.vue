@@ -52,6 +52,7 @@
           <StepExecute
             :actions-queue-commands="actionsQueueCommands"
             :indexing-rule-commands="indexingRuleCommands"
+            :action-inputs="actionInputs"
           />
         </StepPanel>
       </StepPanels>
@@ -111,6 +112,7 @@ import StepPickSubgraphs from '../components/wizard/StepPickSubgraphs.vue';
 import StepSetAllocations from '../components/wizard/StepSetAllocations.vue';
 import type { WizardSubgraphRow } from '../components/wizard/StepSetAllocations.vue';
 import StepExecute from '../components/wizard/StepExecute.vue';
+import type { ActionInput } from '../composables/queries/useAgentActions';
 import { useAllocations } from '../composables/queries/useAllocations';
 import { useSubgraphs } from '../composables/queries/useSubgraphs';
 import { useNetwork } from '../composables/queries/useNetwork';
@@ -391,6 +393,60 @@ const actionsQueueCommands = computed(() => {
   }
 
   return `${unallocate}${reallocate}${allocate}${reallocateLarger}`;
+});
+
+// Structured action inputs for agent API
+const actionInputs = computed<ActionInput[]>(() => {
+  const inputs: ActionInput[] = [];
+  const skip = new Set<string>();
+  const selectedHashes = new Set(wizardStore.selectedSubgraphHashes);
+
+  // Process closing allocations
+  for (const allo of closingAllocations.value) {
+    const hash = allo.ipfsHash;
+    const poi = wizardStore.customPOIs[hash] || undefined;
+    const force = poi === '0x0' ? true : undefined;
+    const resolvedPoi = poi === '0x0'
+      ? '0x0000000000000000000000000000000000000000000000000000000000000000'
+      : poi;
+
+    const newAmount = wizardStore.newAllocations[hash] ?? 0;
+    if (selectedHashes.has(hash) && newAmount > 0) {
+      // Reallocate
+      inputs.push({
+        type: 'reallocate',
+        deploymentID: hash,
+        allocationID: allo.id,
+        amount: String(newAmount),
+        poi: resolvedPoi,
+        force,
+      });
+      skip.add(hash);
+    } else {
+      // Unallocate
+      inputs.push({
+        type: 'unallocate',
+        deploymentID: hash,
+        allocationID: allo.id,
+        poi: resolvedPoi,
+        force,
+      });
+    }
+  }
+
+  // New allocations (not reallocated)
+  for (const hash of wizardStore.selectedSubgraphHashes) {
+    const amount = wizardStore.newAllocations[hash] ?? 0;
+    if (amount > 0 && !skip.has(hash)) {
+      inputs.push({
+        type: 'allocate',
+        deploymentID: hash,
+        amount: String(amount),
+      });
+    }
+  }
+
+  return inputs;
 });
 
 // ---------- Event handlers ----------

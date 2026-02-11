@@ -189,48 +189,25 @@ import ProgressBar from 'primevue/progressbar';
 import MultiSelect from 'primevue/multiselect';
 import Checkbox from 'primevue/checkbox';
 import Dialog from 'primevue/dialog';
-import { GraphQLClient } from 'graphql-request';
-import { useSettingsStore } from '../composables/state/useSettings';
-import { useSnackbar } from '../composables/state/useSnackbar';
+import {
+  useAgentActions,
+  type AgentAction,
+} from '../composables/queries/useAgentActions';
 
-interface AgentAction {
-  id: string;
-  status: string;
-  type: string;
-  deploymentID: string;
-  allocationID: string;
-  amount: string;
-  poi: string;
-  publicPOI: string;
-  poiBlockNumber: string;
-  force: boolean;
-  priority: number;
-  source: string;
-  reason: string;
-  transaction: string;
-  failureReason: string;
-  protocolNetwork: string;
-}
+const {
+  actions,
+  loading,
+  errors,
+  isConnected,
+  agentEndpoint,
+  fetchActions,
+  approveActions,
+  cancelActions,
+  deleteActions,
+  executeApproved,
+  disconnectAgent,
+} = useAgentActions();
 
-const ACTION_FIELDS = `
-  id status type deploymentID allocationID amount poi publicPOI
-  poiBlockNumber force priority source reason transaction failureReason
-  protocolNetwork
-`;
-
-const settingsStore = useSettingsStore();
-const snackbar = useSnackbar();
-
-const activeAccount = computed(() => settingsStore.getActiveAccount());
-const agentEndpoint = computed(() => activeAccount.value?.agentEndpoint ?? '');
-const isConnected = computed(() => !!activeAccount.value?.agentConnect && !!activeAccount.value?.agentEndpoint);
-const client = computed(() => {
-  if (!isConnected.value || !agentEndpoint.value) return null;
-  return new GraphQLClient(agentEndpoint.value);
-});
-const actions = ref<AgentAction[]>([]);
-const loading = ref(false);
-const errors = ref<string[]>([]);
 const confirmAction = ref<string | null>(null);
 
 const statusOptions = [
@@ -268,7 +245,7 @@ const selectedIds = computed(() => {
 });
 
 function truncateHash(hash: string): string {
-  if (!hash || hash.length <= 14) return hash || '—';
+  if (!hash || hash.length <= 14) return hash || '\u2014';
   return hash.slice(0, 6) + '...' + hash.slice(-4);
 }
 
@@ -326,77 +303,20 @@ const table = useVueTable({
 
 const rows = computed(() => table.getRowModel().rows);
 
-// Agent operations
-function disconnectAgent() {
-  const acc = activeAccount.value;
-  if (acc) acc.agentConnect = false;
-  actions.value = [];
-}
-
-async function fetchActions() {
-  const c = client.value;
-  if (!c) return;
-  loading.value = true;
-  try {
-    const data = await c.request<{ actions: AgentAction[] }>(
-      `query actions($filter: ActionFilter!) { actions(filter: $filter) { ${ACTION_FIELDS} } }`,
-      { filter: {} },
-    );
-    actions.value = data.actions;
-  } catch (err) {
-    errors.value.push(String(err));
-    snackbar.show('Failed to fetch actions', 'error');
-  } finally {
-    loading.value = false;
-  }
-}
-
 async function executeConfirmedAction() {
   const action = confirmAction.value;
   confirmAction.value = null;
-  const c = client.value;
-  if (!c) return;
 
-  try {
-    if (action === 'approve') {
-      const data = await c.request<{ approveActions: AgentAction[] }>(
-        `mutation approveActions($actionIDs: [String!]!) { approveActions(actionIDs: $actionIDs) { ${ACTION_FIELDS} } }`,
-        { actionIDs: selectedIds.value },
-      );
-      updateActions(data.approveActions);
-      snackbar.show(`Approved ${data.approveActions.length} actions`, 'success');
-    } else if (action === 'cancel') {
-      const data = await c.request<{ cancelActions: AgentAction[] }>(
-        `mutation cancelActions($actionIDs: [String!]!) { cancelActions(actionIDs: $actionIDs) { ${ACTION_FIELDS} } }`,
-        { actionIDs: selectedIds.value },
-      );
-      updateActions(data.cancelActions);
-      snackbar.show(`Cancelled ${data.cancelActions.length} actions`, 'success');
-    } else if (action === 'delete') {
-      const ids = selectedIds.value;
-      await c.request(
-        `mutation deleteActions($actionIDs: [String!]!) { deleteActions(actionIDs: $actionIDs) { ${ACTION_FIELDS} } }`,
-        { actionIDs: ids },
-      );
-      actions.value = actions.value.filter((a) => !ids.includes(a.id));
-      snackbar.show(`Deleted ${ids.length} actions`, 'success');
-    } else if (action === 'execute') {
-      const data = await c.request<{ executeApprovedActions: AgentAction[] }>(
-        `mutation executeApprovedActions { executeApprovedActions { ${ACTION_FIELDS} } }`,
-      );
-      updateActions(data.executeApprovedActions);
-      snackbar.show(`Executed ${data.executeApprovedActions.length} actions`, 'success');
-    }
-    rowSelection.value = {};
-  } catch (err) {
-    errors.value.push(String(err));
-    snackbar.show('Agent error. Check errors for details.', 'error');
+  if (action === 'approve') {
+    await approveActions(selectedIds.value);
+  } else if (action === 'cancel') {
+    await cancelActions(selectedIds.value);
+  } else if (action === 'delete') {
+    await deleteActions(selectedIds.value);
+  } else if (action === 'execute') {
+    await executeApproved();
   }
-}
-
-function updateActions(updated: AgentAction[]) {
-  const map = new Map(updated.map((a) => [a.id, a]));
-  actions.value = actions.value.map((a) => map.get(a.id) ?? a);
+  rowSelection.value = {};
 }
 
 // Auto-fetch on mount if connected
