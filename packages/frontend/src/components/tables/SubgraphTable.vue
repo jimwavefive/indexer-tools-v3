@@ -91,7 +91,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, h } from 'vue';
 import {
   useVueTable,
   createColumnHelper,
@@ -146,15 +146,20 @@ const NUMBER_COLUMNS = new Set([
   'signalledTokens', 'proportion', 'stakedTokens',
 ]);
 
-const SELECT_COLUMNS = new Set(['network']);
+const SELECT_COLUMNS = new Set(['network', 'statusChecks']);
 
 function getFilterType(columnId: string): 'text' | 'number' | 'select' {
   if (SELECT_COLUMNS.has(columnId)) return 'select';
   return NUMBER_COLUMNS.has(columnId) ? 'number' : 'text';
 }
 
+const STATUS_CHECK_OPTIONS = [
+  'Closeable', 'Synced', 'Syncing', 'Failed', 'Deterministic', 'Non-deterministic',
+];
+
 function getFilterOptions(columnId: string): string[] | undefined {
   if (!SELECT_COLUMNS.has(columnId)) return undefined;
+  if (columnId === 'statusChecks') return STATUS_CHECK_OPTIONS;
   const values = new Set<string>();
   for (const row of props.data) {
     if (columnId === 'network' && row.network) {
@@ -162,6 +167,27 @@ function getFilterOptions(columnId: string): string[] | undefined {
     }
   }
   return [...values].sort();
+}
+
+function statusCheckFilter(row: any, _columnId: string, filterValue: string) {
+  const original = row.original;
+  const hs = original.healthStatus as string;
+  switch (filterValue) {
+    case 'Closeable':
+      return hs === 'Synced' || hs === 'Failed DET';
+    case 'Synced':
+      return hs === 'Synced';
+    case 'Syncing':
+      return hs === 'Syncing';
+    case 'Failed':
+      return hs.startsWith('Failed');
+    case 'Deterministic':
+      return hs === 'Failed DET';
+    case 'Non-deterministic':
+      return hs === 'Failed NONDET';
+    default:
+      return true;
+  }
 }
 
 function numberRangeFilter(row: any, columnId: string, filterValue: [number?, number?]) {
@@ -206,6 +232,32 @@ const columns = [
     header: 'Network',
     size: 100,
     cell: (info) => info.getValue() || '\u2014',
+  }),
+  columnHelper.accessor('healthStatus', {
+    id: 'statusChecks',
+    header: 'Health',
+    size: 140,
+    filterFn: statusCheckFilter,
+    cell: (info) => {
+      const row = info.row.original;
+      const label = row.healthStatus || '\u2014';
+
+      // Dot 1: Synced
+      const syncedColor = row.healthSynced === true
+        ? 'health-green'
+        : row.healthSynced === false ? 'health-red' : 'health-default';
+
+      // Dot 2: Deterministic failure
+      const detColor = row.healthDeterministic === true
+        ? 'health-red'
+        : row.healthDeterministic === false ? 'health-yellow' : 'health-default';
+
+      return h('span', { class: 'health-cell' }, [
+        h('span', { class: `health-dot ${syncedColor}`, title: 'Synced' }),
+        h('span', { class: `health-dot ${detColor}`, title: 'Deterministic' }),
+        label,
+      ]);
+    },
   }),
   columnHelper.accessor('createdAt', {
     id: 'createdAt',
@@ -414,4 +466,25 @@ const paddingBottom = computed(() =>
   color: var(--p-text-muted-color);
   border-top: 1px solid var(--app-surface-border);
 }
+
+/* Health dot indicators */
+:deep(.health-cell) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+:deep(.health-dot) {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+:deep(.health-green) { background: #4caf50; }
+:deep(.health-blue) { background: #2196f3; }
+:deep(.health-red) { background: #f44336; }
+:deep(.health-yellow) { background: #ff9800; }
+:deep(.health-default) { background: #9e9e9e; }
 </style>

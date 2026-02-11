@@ -98,7 +98,7 @@
       </div>
       <div class="filter-item checkbox-item">
         <Checkbox v-model="settingsStore.state.limitToIndexerChains" :binary="true" input-id="lic" />
-        <label for="lic">Limit to indexer's chains</label>
+        <label for="lic">Limit GQL to Indexer's chains</label>
       </div>
     </div>
 

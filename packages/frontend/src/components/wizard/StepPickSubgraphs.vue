@@ -4,7 +4,7 @@
       <p class="step-hint">Select subgraphs to allocate to.</p>
       <div class="filter-item checkbox-item">
         <Checkbox v-model="settingsStore.state.limitToIndexerChains" :binary="true" input-id="lic-wizard" />
-        <label for="lic-wizard">Limit to indexer's chains</label>
+        <label for="lic-wizard">Limit GQL to Indexer's chains</label>
       </div>
     </div>
     <SubgraphTable

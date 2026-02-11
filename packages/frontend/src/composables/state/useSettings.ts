@@ -19,6 +19,7 @@ export interface SortSetting {
 const DEFAULT_SUBGRAPH_COLUMNS: ColumnSetting[] = [
   { id: 'status', title: 'Status', visible: true },
   { id: 'name', title: 'Name', visible: true },
+  { id: 'statusChecks', title: 'Health', visible: true },
   { id: 'network', title: 'Network', visible: true },
   { id: 'createdAt', title: 'Created', visible: true },
   { id: 'apr', title: 'Current APR', visible: true },

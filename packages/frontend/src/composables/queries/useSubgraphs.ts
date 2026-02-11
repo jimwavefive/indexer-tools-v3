@@ -5,6 +5,7 @@ import { useSettingsStore } from '../state/useSettings';
 import { useGraphClient } from '../util/useGraphClient';
 import { useNetwork } from './useNetwork';
 import { useAccount } from './useAccount';
+import { useDeploymentStatus } from './useDeploymentStatus';
 import {
   GET_SUBGRAPHS,
   GET_SUBGRAPHS_NO_NETWORK_FILTER,
@@ -68,6 +69,10 @@ export interface EnrichedSubgraphRow {
   maxAllo: number;
   currentlyAllocated: boolean;
   poweredBySubstreams: boolean;
+  healthStatus: string;
+  healthColor: string;
+  healthSynced: boolean | null;
+  healthDeterministic: boolean | null;
 }
 
 interface SubgraphsResponse {
@@ -163,6 +168,10 @@ export function enrichSubgraphs(
       maxAllo: maxAlloVal,
       currentlyAllocated: allocatedDeployments.has(dep.ipfsHash),
       poweredBySubstreams: dep.manifest?.poweredBySubstreams || false,
+      healthStatus: '',
+      healthColor: 'default',
+      healthSynced: null,
+      healthDeterministic: null,
     };
   }
 
@@ -288,6 +297,7 @@ export function useSubgraphs(indexerChains?: Ref<string[]>) {
   const { networkClient } = useGraphClient();
   const { data: networkData } = useNetwork();
   const { data: accountData } = useAccount();
+  const deploymentStatusQuery = useDeploymentStatus();
 
   // When "Limit to indexer's chains" is enabled, use chains from active allocations
   // for the GQL query filter; otherwise fall back to the manual network filter
@@ -323,7 +333,7 @@ export function useSubgraphs(indexerChains?: Ref<string[]>) {
   // Enriched subgraphs (computed from raw query data + network + account)
   const enriched = computed(() => {
     if (!query.data.value) return [];
-    return enrichSubgraphs(
+    const rows = enrichSubgraphs(
       query.data.value,
       networkData.value,
       accountData.value?.rewardCut ?? 0,
@@ -332,6 +342,23 @@ export function useSubgraphs(indexerChains?: Ref<string[]>) {
       showNewApr.value,
       new Set<string>(), // allocatedDeployments -- populated when useAllocations exists
     );
+
+    // Join deployment health status
+    const statuses = deploymentStatusQuery.data.value;
+    if (statuses && statuses.length > 0) {
+      const statusMap = new Map(statuses.map((s) => [s.subgraph, s]));
+      for (const row of rows) {
+        const ds = statusMap.get(row.ipfsHash);
+        if (ds) {
+          row.healthStatus = ds.statusLabel;
+          row.healthColor = ds.statusColor;
+          row.healthSynced = ds.synced;
+          row.healthDeterministic = ds.fatalError?.deterministic ?? null;
+        }
+      }
+    }
+
+    return rows;
   });
 
   // Build filter params
