@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import { useSettingsStore } from '../state/useSettings';
+import { useChainStore } from '../state/useChain';
 import { useSnackbar } from '../state/useSnackbar';
 
 export interface AgentAction {
@@ -44,6 +45,7 @@ export interface ActionInput {
 
 export function useAgentActions() {
   const settingsStore = useSettingsStore();
+  const chainStore = useChainStore();
   const snackbar = useSnackbar();
 
   const activeAccount = computed(() => settingsStore.getActiveAccount());
@@ -180,6 +182,35 @@ export function useAgentActions() {
     }
   }
 
+  async function addToOffchainSync(ipfsHashes: string[]): Promise<number> {
+    if (!isConnected.value || ipfsHashes.length === 0) return 0;
+    let added = 0;
+    for (const hash of ipfsHashes) {
+      try {
+        await agentRequest(
+          `mutation setIndexingRule($rule: IndexingRuleInput!) {
+            setIndexingRule(rule: $rule) { identifier decisionBasis }
+          }`,
+          {
+            rule: {
+              identifier: hash,
+              identifierType: 'deployment',
+              decisionBasis: 'offchain',
+              protocolNetwork: chainStore.activeChainId,
+            },
+          },
+        );
+        added++;
+      } catch (err) {
+        errors.value.push(`Failed to sync ${hash.slice(0, 7)}...: ${err}`);
+      }
+    }
+    if (added > 0) {
+      snackbar.success(`Added ${added} deployment${added !== 1 ? 's' : ''} to offchain sync`);
+    }
+    return added;
+  }
+
   return {
     actions,
     loading,
@@ -192,6 +223,7 @@ export function useAgentActions() {
     deleteActions,
     executeApproved,
     queueActions,
+    addToOffchainSync,
     disconnectAgent,
   };
 }

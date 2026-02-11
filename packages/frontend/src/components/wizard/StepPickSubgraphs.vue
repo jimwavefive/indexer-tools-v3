@@ -1,7 +1,18 @@
 <template>
   <div class="step-pick-subgraphs">
     <div class="step-toolbar">
-      <p class="step-hint">Select subgraphs to allocate to.</p>
+      <div class="toolbar-left">
+        <p class="step-hint">Select subgraphs to allocate to.</p>
+        <Button
+          v-if="isConnected && selectedHashes.length > 0"
+          :label="`Add ${selectedHashes.length} to Offchain Sync`"
+          icon="pi pi-cloud-upload"
+          severity="secondary"
+          size="small"
+          :loading="syncLoading"
+          @click="handleAddToSync"
+        />
+      </div>
       <div class="toolbar-controls">
         <div class="filter-item field-inline">
           <label>Target APR (%)</label>
@@ -35,7 +46,7 @@
       :loading="loading"
       :selectable="true"
       :table-height="tableHeight"
-      @update:selected="$emit('update:selected', $event)"
+      @update:selected="onSelected"
     />
   </div>
 </template>
@@ -44,11 +55,14 @@
 import { ref, watch } from 'vue';
 import Checkbox from 'primevue/checkbox';
 import InputText from 'primevue/inputtext';
+import Button from 'primevue/button';
 import SubgraphTable from '../tables/SubgraphTable.vue';
 import type { EnrichedSubgraphRow } from '../../composables/queries/useSubgraphs';
 import { useSettingsStore } from '../../composables/state/useSettings';
+import { useAgentActions } from '../../composables/queries/useAgentActions';
 
 const settingsStore = useSettingsStore();
+const { isConnected, addToOffchainSync } = useAgentActions();
 
 const props = defineProps<{
   data: EnrichedSubgraphRow[];
@@ -62,6 +76,24 @@ const emit = defineEmits<{
   'update:autoTargetApr': [value: boolean];
 }>();
 
+// Track selected hashes locally for the sync button
+const selectedHashes = ref<string[]>([]);
+const syncLoading = ref(false);
+
+function onSelected(hashes: string[]) {
+  selectedHashes.value = hashes;
+  emit('update:selected', hashes);
+}
+
+async function handleAddToSync() {
+  syncLoading.value = true;
+  try {
+    await addToOffchainSync(selectedHashes.value);
+  } finally {
+    syncLoading.value = false;
+  }
+}
+
 // Local toggle synced to parent
 const localAutoTargetApr = ref(props.autoTargetApr);
 watch(() => props.autoTargetApr, (v) => { localAutoTargetApr.value = v; });
@@ -74,6 +106,12 @@ watch(localAutoTargetApr, (v) => { emit('update:autoTargetApr', v); });
   align-items: center;
   justify-content: space-between;
   margin-bottom: 0.75rem;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .step-hint {

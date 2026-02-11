@@ -103,6 +103,24 @@ function loadFromStorage<T>(key: string, fallback: T): T {
   }
 }
 
+/** Sync stored columns with current defaults: add missing, remove stale, preserve user order/visibility. */
+function migrateColumns(stored: ColumnSetting[], defaults: ColumnSetting[]): ColumnSetting[] {
+  const defaultMap = new Map(defaults.map((c) => [c.id, c]));
+  const storedIds = new Set(stored.map((c) => c.id));
+
+  // Keep existing columns that still exist in defaults (preserve user order/visibility)
+  const result = stored.filter((c) => defaultMap.has(c.id));
+
+  // Append any new columns from defaults that aren't in stored
+  for (const def of defaults) {
+    if (!storedIds.has(def.id)) {
+      result.push({ ...def });
+    }
+  }
+
+  return result;
+}
+
 export const useSettingsStore = defineStore('settings', () => {
   const runtimeConfig = useRuntimeConfig();
 
@@ -149,6 +167,10 @@ export const useSettingsStore = defineStore('settings', () => {
   if (persisted && typeof persisted === 'object') {
     Object.assign(state, persisted);
   }
+
+  // Sync stored columns with current defaults (add new columns, remove stale ones)
+  state.subgraphColumns = migrateColumns(state.subgraphColumns, DEFAULT_SUBGRAPH_COLUMNS);
+  state.allocationColumns = migrateColumns(state.allocationColumns, DEFAULT_ALLOCATION_COLUMNS);
 
   // If no accounts from localStorage, use runtime config defaults
   if (!state.accounts.length && runtimeConfig.accounts.length) {
