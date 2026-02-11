@@ -291,7 +291,7 @@ async function fetchAllSubgraphs(
   return allResults;
 }
 
-export function useSubgraphs(indexerChains?: Ref<string[]>) {
+export function useSubgraphs(indexerChains?: Ref<string[]>, allocatedDeployments?: Ref<Set<string>>) {
   const chainStore = useChainStore();
   const settingsStore = useSettingsStore();
   const { networkClient } = useGraphClient();
@@ -340,7 +340,7 @@ export function useSubgraphs(indexerChains?: Ref<string[]>) {
       settingsStore.state.newAllocation,
       settingsStore.state.targetApr,
       showNewApr.value,
-      new Set<string>(), // allocatedDeployments -- populated when useAllocations exists
+      allocatedDeployments?.value ?? new Set<string>(),
     );
 
     // Join deployment health status

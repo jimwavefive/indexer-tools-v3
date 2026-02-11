@@ -126,8 +126,8 @@ import { useAutoRefresh } from '../composables/util/useAutoRefresh';
 
 const settingsStore = useSettingsStore();
 
-const { availableNetworks: indexerChains } = useAllocations();
-const { enriched, filtered, availableNetworks, isLoading, refetch } = useSubgraphs(indexerChains);
+const { availableNetworks: indexerChains, allocatedDeployments } = useAllocations();
+const { enriched, filtered, availableNetworks, isLoading, refetch } = useSubgraphs(indexerChains, allocatedDeployments);
 
 // Debounced signal filter inputs
 function debounce(fn: (...args: unknown[]) => void, ms: number) {
