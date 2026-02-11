@@ -50,10 +50,33 @@
           @click="appStore.toggleTheme()"
           aria-label="Toggle theme"
         />
-        <!-- Account indicator -->
-        <span v-if="activeAccount" class="account-badge">
+        <!-- Account selector -->
+        <span
+          v-if="activeAccount"
+          class="account-badge account-badge-clickable"
+          @click="toggleAccountPopover"
+        >
           {{ activeAccount.name || truncateAddress(activeAccount.address) }}
+          <i class="pi pi-chevron-down" style="font-size: 0.7rem; margin-left: 0.25rem" />
         </span>
+        <Popover ref="accountPopoverRef">
+          <div class="account-popover">
+            <div
+              v-for="acc in settingsStore.state.accounts"
+              :key="acc.address + acc.chain"
+              class="account-option"
+              :class="{ active: acc.active }"
+              @click="selectAccount(acc)"
+            >
+              <div class="account-option-name">
+                {{ acc.name || truncateAddress(acc.address) }}
+              </div>
+              <div class="account-option-addr">
+                {{ truncateAddress(acc.address) }} ({{ acc.chain }})
+              </div>
+            </div>
+          </div>
+        </Popover>
       </template>
     </Toolbar>
 
@@ -84,12 +107,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import Toolbar from 'primevue/toolbar';
 import Button from 'primevue/button';
 import Select from 'primevue/select';
 import Drawer from 'primevue/drawer';
+import Popover from 'primevue/popover';
 import type { ChainId } from '@indexer-tools/shared';
 import { CHAIN_CONFIGS } from '@indexer-tools/shared';
 import { useChainStore } from '../composables/state/useChain';
@@ -134,6 +158,18 @@ function truncateAddress(addr: string): string {
   if (addr.length <= 12) return addr;
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
+
+// Account popover
+const accountPopoverRef = ref();
+
+function toggleAccountPopover(event: Event) {
+  accountPopoverRef.value?.toggle(event);
+}
+
+function selectAccount(acc: import('../plugins/defaults').Account) {
+  settingsStore.switchAccount(acc.address, acc.chain);
+  accountPopoverRef.value?.hide();
+}
 </script>
 
 <style scoped>
@@ -169,6 +205,49 @@ function truncateAddress(addr: string): string {
   background: var(--app-badge-bg);
   color: var(--app-badge-text);
   white-space: nowrap;
+}
+
+.account-badge-clickable {
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.account-badge-clickable:hover {
+  filter: brightness(0.9);
+}
+
+.account-popover {
+  display: flex;
+  flex-direction: column;
+  min-width: 14rem;
+}
+
+.account-option {
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  border-radius: var(--p-border-radius);
+  transition: background 0.15s;
+}
+
+.account-option:hover {
+  background: var(--app-table-row-hover);
+}
+
+.account-option.active {
+  background: var(--app-surface-elevated);
+  font-weight: 600;
+}
+
+.account-option-name {
+  font-size: 0.85rem;
+}
+
+.account-option-addr {
+  font-size: 0.75rem;
+  color: var(--p-text-muted-color);
+  font-family: monospace;
 }
 
 .nav-list {
