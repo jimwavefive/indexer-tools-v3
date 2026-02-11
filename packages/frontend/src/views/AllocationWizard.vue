@@ -31,7 +31,9 @@
             :data="subFiltered"
             :loading="subLoading"
             :table-height="tableHeight"
+            :auto-target-apr="autoTargetApr"
             @update:selected="onSubgraphsSelected"
+            @update:auto-target-apr="autoTargetApr = $event"
           />
         </StepPanel>
         <StepPanel :value="4">
@@ -41,13 +43,9 @@
             :available-stake-grt="availableStakeGrt"
             :min-allocation="wizardStore.minAllocation"
             :min-allocation0-signal="wizardStore.minAllocation0Signal"
-            :target-apr="targetApr"
-            :auto-target-apr="autoTargetApr"
             @update:allocation="onAllocationUpdate"
             @update:min-allocation="wizardStore.minAllocation = $event"
             @update:min-allocation0-signal="wizardStore.minAllocation0Signal = $event"
-            @update:target-apr="targetApr = $event"
-            @update:auto-target-apr="autoTargetApr = $event"
             @set-max-allos="handleSetMaxAllos"
             @reset-allos="wizardStore.resetAllos()"
           />
@@ -124,11 +122,13 @@ import { useNetwork } from '../composables/queries/useNetwork';
 import { useAccount } from '../composables/queries/useAccount';
 import { useWizardStore } from '../composables/state/useWizard';
 import { useChainStore } from '../composables/state/useChain';
+import { useSettingsStore } from '../composables/state/useSettings';
 
 const currentStep = ref(1);
 
 const chainStore = useChainStore();
 const wizardStore = useWizardStore();
+const settingsStore = useSettingsStore();
 
 // Query composables
 const {
@@ -151,7 +151,6 @@ const tableHeight = computed(() => Math.max(window.innerHeight - 320, 400));
 // ---------- Auto APR ----------
 
 const autoTargetApr = ref(false);
-const targetApr = ref(10);
 
 // ---------- Closing allocations (Step 1 → 2) ----------
 
@@ -227,7 +226,7 @@ const wizardSubgraphs = computed<WizardSubgraphRow[]>(() => {
     issuancePerBlock: network.issuancePerBlock,
   };
   const rewardCut = accountData.value?.rewardCut ?? 0;
-  const targetAprVal = targetApr.value;
+  const targetAprVal = parseFloat(settingsStore.state.targetApr) || 10;
 
   return selected.map((sub) => {
     const newAlloGrt = wizardStore.newAllocations[sub.ipfsHash] ?? 0;
@@ -378,7 +377,7 @@ watch(
     );
 
     if (computed_apr > 0) {
-      targetApr.value = Math.round(computed_apr * 100) / 100;
+      settingsStore.state.targetApr = String(Math.round(computed_apr * 100) / 100);
       // Trigger redistribution with new APR
       handleSetMaxAllos();
     }

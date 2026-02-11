@@ -17,21 +17,18 @@ export interface SortSetting {
 
 // Default column configurations — IDs correspond to TanStack Table column IDs
 const DEFAULT_SUBGRAPH_COLUMNS: ColumnSetting[] = [
-  { id: 'status', title: 'Status', visible: true },
-  { id: 'name', title: 'Name', visible: true },
   { id: 'statusChecks', title: 'Health', visible: true },
+  { id: 'name', title: 'Name', visible: true },
   { id: 'network', title: 'Network', visible: true },
   { id: 'createdAt', title: 'Created', visible: true },
+  { id: 'maxAllo', title: 'Max Allocation', visible: true },
   { id: 'apr', title: 'Current APR', visible: true },
   { id: 'newApr', title: 'New APR', visible: true },
-  { id: 'maxAllo', title: 'Max Allocation', visible: false },
   { id: 'dailyRewards', title: 'Est Daily Rewards', visible: false },
   { id: 'dailyRewardsCut', title: 'Est Daily Rewards (After Cut)', visible: false },
   { id: 'signalledTokens', title: 'Current Signal', visible: true },
   { id: 'proportion', title: 'Current Proportion', visible: true },
   { id: 'stakedTokens', title: 'Current Allocations', visible: false },
-  { id: 'queryFees', title: 'Query Fees (1d)', visible: false },
-  { id: 'queryCount', title: 'Queries (1d)', visible: false },
   { id: 'deploymentId', title: 'Deployment ID', visible: false },
 ];
 
