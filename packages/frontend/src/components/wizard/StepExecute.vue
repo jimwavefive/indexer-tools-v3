@@ -7,8 +7,7 @@
       <!-- Agent API section (primary) -->
       <div v-if="isConnected" class="agent-section">
         <div class="agent-bar">
-          <span class="agent-label">Agent connected:</span>
-          <span class="agent-url">{{ agentEndpoint }}</span>
+          <span class="agent-badge connected">Connected to indexer-agent API</span>
         </div>
 
         <!-- Queue button -->
@@ -26,8 +25,51 @@
           </span>
         </div>
 
-        <!-- Actions table -->
-        <div v-if="actions.length > 0" class="actions-table-section">
+        <!-- Action buttons (always visible) -->
+        <div class="action-buttons">
+          <Button
+            label="Approve"
+            icon="pi pi-check"
+            severity="success"
+            size="small"
+            :disabled="selectedIds.length === 0"
+            @click="confirmAction = 'approve'"
+          />
+          <Button
+            label="Cancel"
+            icon="pi pi-ban"
+            severity="warn"
+            size="small"
+            :disabled="selectedIds.length === 0"
+            @click="confirmAction = 'cancel'"
+          />
+          <Button
+            label="Delete"
+            icon="pi pi-trash"
+            severity="danger"
+            size="small"
+            :disabled="selectedIds.length === 0"
+            @click="confirmAction = 'delete'"
+          />
+          <div class="action-spacer" />
+          <Button
+            label="Refresh"
+            icon="pi pi-refresh"
+            severity="secondary"
+            size="small"
+            :loading="loading"
+            @click="fetchActions()"
+          />
+          <Button
+            label="Execute Approved"
+            icon="pi pi-play"
+            size="small"
+            @click="confirmAction = 'execute'"
+          />
+        </div>
+
+        <!-- Actions table (always visible) -->
+        <div class="actions-table-section">
           <div class="table-scroll">
             <table class="data-table">
               <thead>
@@ -51,6 +93,9 @@
                 </tr>
               </thead>
               <tbody>
+                <tr v-if="rows.length === 0">
+                  <td :colspan="columns.length + 1" class="td-cell no-actions">No actions in queue</td>
+                </tr>
                 <tr v-for="row in rows" :key="row.id" class="data-row">
                   <td class="td-cell">
                     <Checkbox
@@ -66,41 +111,6 @@
               </tbody>
             </table>
           </div>
-
-          <!-- Action buttons -->
-          <div class="action-buttons">
-            <Button
-              label="Approve"
-              icon="pi pi-check"
-              severity="success"
-              size="small"
-              :disabled="selectedIds.length === 0"
-              @click="confirmAction = 'approve'"
-            />
-            <Button
-              label="Cancel"
-              icon="pi pi-ban"
-              severity="warn"
-              size="small"
-              :disabled="selectedIds.length === 0"
-              @click="confirmAction = 'cancel'"
-            />
-            <Button
-              label="Delete"
-              icon="pi pi-trash"
-              severity="danger"
-              size="small"
-              :disabled="selectedIds.length === 0"
-              @click="confirmAction = 'delete'"
-            />
-            <div class="action-spacer" />
-            <Button
-              label="Execute Approved"
-              icon="pi pi-play"
-              size="small"
-              @click="confirmAction = 'execute'"
-            />
-          </div>
         </div>
 
         <!-- Errors -->
@@ -108,8 +118,11 @@
           <div v-for="(err, i) in errors" :key="i" class="error-item">{{ err }}</div>
         </div>
       </div>
-      <div v-else class="no-agent-hint">
-        Connect to the indexer agent in Settings &rarr; Accounts to queue actions directly.
+      <div v-else>
+        <div class="agent-bar">
+          <span class="agent-badge disconnected">Not connected to indexer-agent API</span>
+        </div>
+        <p class="no-agent-hint">Connect to the indexer agent in Settings &rarr; Accounts to queue actions directly.</p>
       </div>
 
       <!-- CLI commands (collapsible fallback) -->
@@ -335,13 +348,22 @@ if (isConnected.value) fetchActions();
   font-size: 0.8rem;
 }
 
-.agent-label {
+.agent-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
   font-weight: 600;
 }
 
-.agent-url {
-  color: var(--p-text-muted-color);
-  font-family: monospace;
+.agent-badge.connected {
+  background: #4caf50;
+  color: #fff;
+}
+
+.agent-badge.disconnected {
+  background: #f44336;
+  color: #fff;
 }
 
 .queue-row {
@@ -358,10 +380,14 @@ if (isConnected.value) fetchActions();
 .no-agent-hint {
   font-size: 0.85rem;
   color: var(--p-text-muted-color);
-  padding: 0.75rem;
-  border: 1px dashed var(--app-surface-border);
-  border-radius: 6px;
+  margin-top: 0.5rem;
   text-align: center;
+}
+
+.no-actions {
+  text-align: center;
+  color: var(--p-text-muted-color);
+  padding: 1.5rem 0.6rem;
 }
 
 .actions-table-section {
