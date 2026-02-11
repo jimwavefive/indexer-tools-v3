@@ -207,19 +207,24 @@ export function useIncidents(statusFilter: Ref<string>) {
 
 // ---------- Notification Settings ----------
 
+export interface NotificationSettingsData {
+  pollingIntervalMinutes: number;
+  defaultChannelId: string | null;
+}
+
 export function useNotificationSettings() {
   const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: ['notifications', 'settings'] as const,
     queryFn: () =>
-      apiFetch<{ pollingIntervalMinutes: number }>('/api/notifications/settings'),
+      apiFetch<NotificationSettingsData>('/api/notifications/settings'),
     staleTime: 120_000,
   });
 
   const updateSettings = useMutation({
-    mutationFn: (settings: { pollingIntervalMinutes: number }) =>
-      apiFetch<{ pollingIntervalMinutes: number }>('/api/notifications/settings', {
+    mutationFn: (settings: Partial<NotificationSettingsData>) =>
+      apiFetch<NotificationSettingsData>('/api/notifications/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),

@@ -57,6 +57,11 @@
               @click="rulesQuery.refetch()"
             />
           </div>
+          <div v-if="showChannelWarning" class="channel-warning">
+            <i class="pi pi-exclamation-triangle" />
+            {{ rulesWithoutChannels.length }} enabled rule{{ rulesWithoutChannels.length > 1 ? 's have' : ' has' }} no channels assigned.
+            Set a default channel in the Settings tab or assign channels per rule.
+          </div>
           <div v-if="rulesQuery.isLoading.value" class="loading-state">
             <ProgressBar mode="indeterminate" style="height: 4px" />
           </div>
@@ -194,15 +199,31 @@
                   :max="120"
                   style="width: 8rem"
                 />
-                <Button
-                  label="Save"
-                  size="small"
-                  @click="handleSaveSettings"
-                  :loading="settingsQuery.updateSettings.isPending.value"
-                />
               </div>
               <small class="field-hint">How often the backend checks rules (1-120 minutes).</small>
             </div>
+            <div class="field" style="margin-top: 1rem">
+              <label>Default notification channel</label>
+              <Select
+                v-model="defaultChannelId"
+                :options="defaultChannelOptions"
+                option-label="label"
+                option-value="value"
+                placeholder="None"
+                show-clear
+                style="width: 16rem"
+              />
+              <small class="field-hint">
+                Fallback channel for rules that have no channels assigned.
+              </small>
+            </div>
+            <Button
+              label="Save"
+              size="small"
+              @click="handleSaveSettings"
+              :loading="settingsQuery.updateSettings.isPending.value"
+              style="margin-top: 1rem"
+            />
           </div>
         </TabPanel>
       </TabPanels>
@@ -323,11 +344,15 @@ const rulesSimple = computed(() =>
 // ---------- Settings ----------
 
 const pollingInterval = ref(60);
+const defaultChannelId = ref<string | null>(null);
 
 watch(
   () => settingsQuery.settings.value,
   (s) => {
-    if (s) pollingInterval.value = s.pollingIntervalMinutes;
+    if (s) {
+      pollingInterval.value = s.pollingIntervalMinutes;
+      defaultChannelId.value = s.defaultChannelId;
+    }
   },
   { immediate: true },
 );
@@ -336,12 +361,31 @@ async function handleSaveSettings() {
   try {
     await settingsQuery.updateSettings.mutateAsync({
       pollingIntervalMinutes: pollingInterval.value,
+      defaultChannelId: defaultChannelId.value,
     });
     snackbar.success('Settings saved');
   } catch (e) {
     snackbar.error('Failed to save settings');
   }
 }
+
+// Default channel options for dropdown
+const defaultChannelOptions = computed(() => {
+  const channels = channelsQuery.channels.value ?? [];
+  return channels.map((ch) => ({ label: ch.name, value: ch.id }));
+});
+
+// Warning: rules with no channels and no default channel
+const rulesWithoutChannels = computed(() => {
+  if (!rulesQuery.rules.value) return [];
+  return rulesQuery.rules.value.filter(
+    (r) => r.enabled && (!r.channelIds || r.channelIds.length === 0),
+  );
+});
+
+const showChannelWarning = computed(() => {
+  return rulesWithoutChannels.value.length > 0 && !settingsQuery.settings.value?.defaultChannelId;
+});
 
 // ---------- Incident actions ----------
 
@@ -719,6 +763,23 @@ onUnmounted(() => {
   white-space: pre;
   max-height: 500px;
   overflow-y: auto;
+}
+
+.channel-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  border-radius: var(--p-border-radius);
+  background: var(--p-yellow-100);
+  color: var(--p-yellow-800);
+  font-size: 0.8rem;
+}
+
+:deep(.dark-mode) .channel-warning {
+  background: var(--p-yellow-900);
+  color: var(--p-yellow-200);
 }
 
 .mt-2 {

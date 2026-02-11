@@ -113,9 +113,16 @@ export class NotificationEngine {
         firedKeys.add(incidentKey);
 
         const ruleChIds = ruleChannelMap.get(rule.id) ?? [];
+        // Fall back to default channel if rule has no specific channels assigned
+        const resolvedChIds = ruleChIds.length > 0
+          ? ruleChIds
+          : (() => {
+              const defaultId = this.store.getSetting('defaultChannelId');
+              return defaultId ? [defaultId] : [];
+            })();
         // Only channels that are both assigned to this rule AND globally enabled
-        const effectiveChannelIds = ruleChIds.length > 0
-          ? channels.filter((c) => ruleChIds.includes(c.id)).map((c) => c.id)
+        const effectiveChannelIds = resolvedChIds.length > 0
+          ? channels.filter((c) => resolvedChIds.includes(c.id)).map((c) => c.id)
           : [];
         const existing = this.store.getActiveIncident(rule.id, targetKey);
 

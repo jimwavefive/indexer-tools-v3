@@ -1055,6 +1055,7 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
       const settings = store.getSettings();
       res.json({
         pollingIntervalMinutes: parseInt(settings.pollingIntervalMinutes || '60', 10),
+        defaultChannelId: settings.defaultChannelId || null,
       });
     } catch (err) {
       console.error('Failed to get settings:', err);
@@ -1064,8 +1065,9 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
 
   router.put('/api/notifications/settings', async (req: Request, res: Response) => {
     try {
-      const { pollingIntervalMinutes } = req.body as {
+      const { pollingIntervalMinutes, defaultChannelId } = req.body as {
         pollingIntervalMinutes?: number;
+        defaultChannelId?: string | null;
       };
 
       if (pollingIntervalMinutes !== undefined) {
@@ -1077,9 +1079,19 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
         }
       }
 
+      if (defaultChannelId !== undefined) {
+        if (defaultChannelId) {
+          store.setSetting('defaultChannelId', defaultChannelId);
+        } else {
+          // Clear the default channel
+          store.setSetting('defaultChannelId', '');
+        }
+      }
+
       const settings = store.getSettings();
       res.json({
         pollingIntervalMinutes: parseInt(settings.pollingIntervalMinutes || '60', 10),
+        defaultChannelId: settings.defaultChannelId || null,
       });
     } catch (err) {
       console.error('Failed to update settings:', err);
