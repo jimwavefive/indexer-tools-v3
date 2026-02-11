@@ -32,6 +32,14 @@
           <label>POI Query Endpoint</label>
           <InputText v-model="account.poiQueryEndpoint" class="full-width" />
         </div>
+        <div class="field-row">
+          <ToggleSwitch v-model="account.agentConnect" :input-id="`agent-${idx}`" />
+          <label :for="`agent-${idx}`">Enable Agent Connect</label>
+        </div>
+        <div v-if="account.agentConnect" class="field">
+          <label>Indexer Agent Endpoint</label>
+          <InputText v-model="account.agentEndpoint" class="full-width" placeholder="http://localhost:8000/network" />
+        </div>
       </div>
       <div class="account-actions">
         <Button
@@ -114,6 +122,8 @@ function handleAdd() {
     chain: newChain.value,
     poiQuery: false,
     poiQueryEndpoint: '',
+    agentConnect: false,
+    agentEndpoint: '',
   });
   newAddress.value = '';
   newName.value = '';

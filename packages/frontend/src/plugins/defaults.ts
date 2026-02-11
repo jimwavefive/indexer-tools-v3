@@ -8,6 +8,8 @@ export interface Account {
   active: boolean;
   poiQuery: boolean;
   poiQueryEndpoint: string;
+  agentConnect: boolean;
+  agentEndpoint: string;
 }
 
 export interface RuntimeConfig {

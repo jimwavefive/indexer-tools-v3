@@ -16,21 +16,15 @@
 
     <!-- Agent URL setup -->
     <div v-if="!isConnected" class="setup-section">
-      <p class="muted-text">Connect to your indexer agent to manage actions.</p>
-      <div class="url-input-row">
-        <InputText
-          v-model="urlInput"
-          placeholder="http://localhost:8000/network"
-          class="url-input"
-        />
-        <Button label="Connect" @click="connectAgent" :disabled="!urlInput" />
-      </div>
+      <p class="muted-text">
+        Configure the agent endpoint in Settings &rarr; Accounts to manage actions.
+      </p>
     </div>
 
     <template v-else>
       <!-- Connected header with URL -->
       <div class="agent-bar">
-        <span class="agent-url">{{ agentUrl }}</span>
+        <span class="agent-url">{{ agentEndpoint }}</span>
         <Button label="Disconnect" severity="secondary" text size="small" @click="disconnectAgent" />
       </div>
 
@@ -192,11 +186,11 @@ import {
 import type { SortingState, RowSelectionState } from '@tanstack/vue-table';
 import Button from 'primevue/button';
 import ProgressBar from 'primevue/progressbar';
-import InputText from 'primevue/inputtext';
 import MultiSelect from 'primevue/multiselect';
 import Checkbox from 'primevue/checkbox';
 import Dialog from 'primevue/dialog';
-import { useAgentConnect } from '../composables/util/useAgentConnect';
+import { GraphQLClient } from 'graphql-request';
+import { useSettingsStore } from '../composables/state/useSettings';
 import { useSnackbar } from '../composables/state/useSnackbar';
 
 interface AgentAction {
@@ -224,10 +218,16 @@ const ACTION_FIELDS = `
   protocolNetwork
 `;
 
-const { agentUrl, isConnected, client, setAgentUrl } = useAgentConnect();
+const settingsStore = useSettingsStore();
 const snackbar = useSnackbar();
 
-const urlInput = ref(agentUrl.value);
+const activeAccount = computed(() => settingsStore.getActiveAccount());
+const agentEndpoint = computed(() => activeAccount.value?.agentEndpoint ?? '');
+const isConnected = computed(() => !!activeAccount.value?.agentConnect && !!activeAccount.value?.agentEndpoint);
+const client = computed(() => {
+  if (!isConnected.value || !agentEndpoint.value) return null;
+  return new GraphQLClient(agentEndpoint.value);
+});
 const actions = ref<AgentAction[]>([]);
 const loading = ref(false);
 const errors = ref<string[]>([]);
@@ -327,15 +327,10 @@ const table = useVueTable({
 const rows = computed(() => table.getRowModel().rows);
 
 // Agent operations
-function connectAgent() {
-  setAgentUrl(urlInput.value);
-  fetchActions();
-}
-
 function disconnectAgent() {
-  setAgentUrl('');
+  const acc = activeAccount.value;
+  if (acc) acc.agentConnect = false;
   actions.value = [];
-  urlInput.value = '';
 }
 
 async function fetchActions() {
@@ -439,18 +434,6 @@ if (isConnected.value) fetchActions();
 .setup-section {
   padding: 2rem;
   text-align: center;
-}
-
-.url-input-row {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: center;
-  max-width: 500px;
-  margin: 0 auto;
-}
-
-.url-input {
-  flex: 1;
 }
 
 .agent-bar {
