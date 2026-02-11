@@ -50,7 +50,6 @@
             <tr
               v-for="virtualRow in virtualRows"
               :key="virtualRow.key"
-              :ref="(el) => virtualizer.measureElement(el as Element)"
               :data-index="virtualRow.index"
               class="data-row"
             >
