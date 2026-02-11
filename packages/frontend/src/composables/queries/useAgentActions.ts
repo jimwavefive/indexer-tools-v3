@@ -1,5 +1,4 @@
 import { ref, computed } from 'vue';
-import { GraphQLClient } from 'graphql-request';
 import { useSettingsStore } from '../state/useSettings';
 import { useSnackbar } from '../state/useSnackbar';
 
@@ -47,14 +46,26 @@ export function useAgentActions() {
     () => !!activeAccount.value?.agentConnect && !!activeAccount.value?.agentEndpoint,
   );
 
-  const client = computed(() => {
-    if (!isConnected.value || !agentEndpoint.value) return null;
-    return new GraphQLClient(agentEndpoint.value);
-  });
-
   const actions = ref<AgentAction[]>([]);
   const loading = ref(false);
   const errors = ref<string[]>([]);
+
+  // Raw fetch to avoid graphql-request's strict response validation
+  // (indexer-agent can return non-standard error formats)
+  async function agentRequest<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
+    const url = agentEndpoint.value;
+    if (!url) throw new Error('No agent endpoint');
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, variables }),
+    });
+    const json = await res.json();
+    if (json.errors?.length) {
+      throw new Error(json.errors.map((e: any) => e.message).join(', '));
+    }
+    return json.data as T;
+  }
 
   function disconnectAgent() {
     const acc = activeAccount.value;
@@ -68,11 +79,10 @@ export function useAgentActions() {
   }
 
   async function fetchActions() {
-    const c = client.value;
-    if (!c) return;
+    if (!isConnected.value) return;
     loading.value = true;
     try {
-      const data = await c.request<{ actions: AgentAction[] }>(
+      const data = await agentRequest<{ actions: AgentAction[] }>(
         `query actions($filter: ActionFilter!) { actions(filter: $filter) { ${ACTION_FIELDS} } }`,
         { filter: {} },
       );
@@ -86,10 +96,9 @@ export function useAgentActions() {
   }
 
   async function approveActions(actionIDs: string[]) {
-    const c = client.value;
-    if (!c || actionIDs.length === 0) return;
+    if (!isConnected.value || actionIDs.length === 0) return;
     try {
-      const data = await c.request<{ approveActions: AgentAction[] }>(
+      const data = await agentRequest<{ approveActions: AgentAction[] }>(
         `mutation approveActions($actionIDs: [String!]!) { approveActions(actionIDs: $actionIDs) { ${ACTION_FIELDS} } }`,
         { actionIDs },
       );
@@ -102,10 +111,9 @@ export function useAgentActions() {
   }
 
   async function cancelActions(actionIDs: string[]) {
-    const c = client.value;
-    if (!c || actionIDs.length === 0) return;
+    if (!isConnected.value || actionIDs.length === 0) return;
     try {
-      const data = await c.request<{ cancelActions: AgentAction[] }>(
+      const data = await agentRequest<{ cancelActions: AgentAction[] }>(
         `mutation cancelActions($actionIDs: [String!]!) { cancelActions(actionIDs: $actionIDs) { ${ACTION_FIELDS} } }`,
         { actionIDs },
       );
@@ -118,10 +126,9 @@ export function useAgentActions() {
   }
 
   async function deleteActions(actionIDs: string[]) {
-    const c = client.value;
-    if (!c || actionIDs.length === 0) return;
+    if (!isConnected.value || actionIDs.length === 0) return;
     try {
-      await c.request(
+      await agentRequest(
         `mutation deleteActions($actionIDs: [String!]!) { deleteActions(actionIDs: $actionIDs) { ${ACTION_FIELDS} } }`,
         { actionIDs },
       );
@@ -134,10 +141,9 @@ export function useAgentActions() {
   }
 
   async function executeApproved() {
-    const c = client.value;
-    if (!c) return;
+    if (!isConnected.value) return;
     try {
-      const data = await c.request<{ executeApprovedActions: AgentAction[] }>(
+      const data = await agentRequest<{ executeApprovedActions: AgentAction[] }>(
         `mutation executeApprovedActions { executeApprovedActions { ${ACTION_FIELDS} } }`,
       );
       updateActions(data.executeApprovedActions);
@@ -149,11 +155,10 @@ export function useAgentActions() {
   }
 
   async function queueActions(inputs: ActionInput[]): Promise<AgentAction[]> {
-    const c = client.value;
-    if (!c || inputs.length === 0) return [];
+    if (!isConnected.value || inputs.length === 0) return [];
     loading.value = true;
     try {
-      const data = await c.request<{ queueActions: AgentAction[] }>(
+      const data = await agentRequest<{ queueActions: AgentAction[] }>(
         `mutation queueActions($actions: [ActionInput!]!) { queueActions(actions: $actions) { ${ACTION_FIELDS} } }`,
         { actions: inputs },
       );
@@ -175,7 +180,6 @@ export function useAgentActions() {
     errors,
     isConnected,
     agentEndpoint,
-    client,
     fetchActions,
     approveActions,
     cancelActions,
