@@ -1,44 +1,49 @@
 <template>
   <div class="step-execute">
-    <div class="command-section">
-      <div class="section-header">
-        <h3>Action Queue Commands</h3>
-        <Button
-          label="Copy"
-          icon="pi pi-copy"
-          severity="secondary"
-          size="small"
-          @click="copyToClipboard(actionsQueueCommands)"
+    <div v-if="!actionsQueueCommands && !indexingRuleCommands" class="empty-hint">
+      No commands to execute. Select allocations to close in Step 1 and/or subgraphs to open in Step 3.
+    </div>
+    <template v-else>
+      <div class="command-section">
+        <div class="section-header">
+          <h3>Action Queue Commands</h3>
+          <Button
+            label="Copy"
+            icon="pi pi-copy"
+            severity="secondary"
+            size="small"
+            @click="copyToClipboard(actionsQueueCommands)"
+          />
+        </div>
+        <Textarea
+          :model-value="actionsQueueCommands"
+          readonly
+          auto-resize
+          :rows="8"
+          class="command-textarea"
         />
       </div>
-      <Textarea
-        :model-value="actionsQueueCommands"
-        readonly
-        auto-resize
-        :rows="8"
-        class="command-textarea"
-      />
-    </div>
 
-    <div class="command-section">
-      <div class="section-header">
-        <h3>Indexing Rule Commands</h3>
-        <Button
-          label="Copy"
-          icon="pi pi-copy"
-          severity="secondary"
-          size="small"
-          @click="copyToClipboard(indexingRuleCommands)"
+      <div class="command-section">
+        <div class="section-header">
+          <h3>Indexing Rule Commands</h3>
+          <Button
+            label="Copy"
+            icon="pi pi-copy"
+            severity="secondary"
+            size="small"
+            @click="copyToClipboard(indexingRuleCommands)"
+          />
+        </div>
+        <Textarea
+          :model-value="indexingRuleCommands"
+          readonly
+          auto-resize
+          :rows="8"
+          class="command-textarea"
         />
       </div>
-      <Textarea
-        :model-value="indexingRuleCommands"
-        readonly
-        auto-resize
-        :rows="8"
-        class="command-textarea"
-      />
-    </div>
+    </template>
   </div>
 </template>
 
@@ -78,5 +83,12 @@ function copyToClipboard(text: string) {
   width: 100%;
   font-family: monospace;
   font-size: 0.8rem;
+}
+
+.empty-hint {
+  text-align: center;
+  padding: 2rem;
+  color: var(--p-text-muted-color);
+  font-size: 0.9rem;
 }
 </style>

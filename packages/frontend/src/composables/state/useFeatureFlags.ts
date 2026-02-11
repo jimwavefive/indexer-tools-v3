@@ -29,12 +29,6 @@ const FLAG_DEFINITIONS: Record<string, FlagDefinition> = {
     envVar: 'VITE_FEATURE_BROWSER_NOTIFICATIONS',
     default: false,
   },
-  experimentalUI: {
-    label: 'Experimental UI',
-    description: 'Experimental UI features and components',
-    envVar: 'VITE_FEATURE_EXPERIMENTAL_UI',
-    default: false,
-  },
 };
 
 function getEnvDefault(envVar: string, fallback: boolean): boolean {

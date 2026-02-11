@@ -27,8 +27,8 @@
               @click="incidentsQuery.refetch()"
               :loading="incidentsQuery.isLoading.value"
             />
-            <span v-if="sseConnected" class="sse-badge connected">SSE Connected</span>
-            <span v-else class="sse-badge disconnected">SSE Disconnected</span>
+            <span v-if="sseConnected" class="sse-badge connected">Live</span>
+            <span v-else class="sse-badge disconnected">Offline</span>
           </div>
           <IncidentTable
             :data="incidentsQuery.incidents.value ?? []"
@@ -186,7 +186,7 @@
         <TabPanel value="settings">
           <div class="settings-form">
             <div class="field">
-              <label>Polling Interval (minutes)</label>
+              <label>Default polling interval (minutes)</label>
               <div class="field-row">
                 <InputNumber
                   v-model="pollingInterval"
