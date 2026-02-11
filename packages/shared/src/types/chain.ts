@@ -9,12 +9,12 @@ export interface ChainConfig {
 }
 
 export interface NetworkState {
-  totalTokensSignalled: string;
-  issuancePerBlock: string;
-  issuancePerYear: string;
-  totalSupply: string;
-  currentEpoch: string;
-  totalTokensAllocated: string;
-  maxThawingPeriod?: string;
+  totalTokensSignalled: bigint;
+  issuancePerBlock: bigint;
+  issuancePerYear: bigint;
+  totalSupply: bigint;
+  currentEpoch: number;
+  totalTokensAllocated: bigint;
+  maxThawingPeriod?: number;
   error: boolean;
 }

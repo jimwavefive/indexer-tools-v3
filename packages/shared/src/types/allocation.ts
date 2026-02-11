@@ -1,5 +1,3 @@
-import type BigNumber from 'bignumber.js';
-
 export interface SubgraphDeployment {
   versions: Array<{
     subgraph: {
@@ -18,10 +16,10 @@ export interface SubgraphDeployment {
   ipfsHash: string;
   createdAt: number;
   originalName: string;
-  stakedTokens: string;
-  indexingRewardAmount: string;
-  signalledTokens: string;
-  queryFeesAmount: string;
+  stakedTokens: bigint;
+  indexingRewardAmount: bigint;
+  signalledTokens: bigint;
+  queryFeesAmount: bigint;
   deniedAt: number | null;
   manifest: {
     network: string;
@@ -34,15 +32,15 @@ export interface Allocation {
     id: string;
   };
   subgraphDeployment: SubgraphDeployment;
-  allocatedTokens: string;
-  effectiveAllocation: string;
+  allocatedTokens: bigint;
+  effectiveAllocation: bigint;
   createdAt: number;
   createdAtEpoch: number;
   createdAtBlockHash: string;
   createdAtBlockNumber: number;
-  indexingRewards: string;
-  indexingIndexerRewards: string;
-  indexingDelegatorRewards: string;
+  indexingRewards: bigint;
+  indexingIndexerRewards: bigint;
+  indexingDelegatorRewards: bigint;
   isLegacy: boolean;
 }
 
@@ -51,11 +49,11 @@ export interface EnrichedAllocation extends Allocation {
   readableDuration: string;
   epochDuration: number;
   proportion: number;
-  apr: string | number;
-  dailyRewards: BigNumber | number;
-  dailyRewardsCut: BigNumber | number;
+  apr: number;
+  dailyRewards: number;
+  dailyRewardsCut: number;
   pendingRewards: PendingRewardsData;
-  pendingRewardsCut: BigNumber;
+  pendingRewardsCut: bigint;
   deploymentStatus: unknown;
   statusChecks: StatusChecks;
   qos?: unknown;
@@ -63,7 +61,7 @@ export interface EnrichedAllocation extends Allocation {
 }
 
 export interface PendingRewardsData {
-  value: BigNumber;
+  value: bigint;
   loading: boolean;
   loaded: boolean;
 }

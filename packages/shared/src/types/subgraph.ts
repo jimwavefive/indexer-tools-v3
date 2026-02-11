@@ -1,16 +1,14 @@
-import type BigNumber from 'bignumber.js';
-
 export interface SubgraphManifest {
   id: string;
   deployment: {
     id: string;
     deniedAt: number | null;
     createdAt: number;
-    indexingRewardAmount: string;
+    indexingRewardAmount: bigint;
     ipfsHash: string;
-    queryFeesAmount: string;
-    signalledTokens: string;
-    stakedTokens: string;
+    queryFeesAmount: bigint;
+    signalledTokens: bigint;
+    stakedTokens: bigint;
     manifest: {
       network: string;
       poweredBySubstreams: boolean;
@@ -33,15 +31,15 @@ export interface SubgraphManifest {
 
 export interface EnrichedSubgraph extends SubgraphManifest {
   proportion: number;
-  apr: BigNumber | number;
-  newApr: BigNumber | number;
-  dailyRewards: BigNumber | number;
-  dailyRewardsCut: BigNumber | number;
-  maxAllo: BigNumber | number;
+  apr: number;
+  newApr: number;
+  dailyRewards: number;
+  dailyRewardsCut: number;
+  maxAllo: number;
   currentlyAllocated: boolean;
   deploymentStatus: unknown;
   upgradeIndexer: unknown;
   numEntities: string | null;
-  futureStakedTokens: BigNumber;
+  futureStakedTokens: bigint;
   queryFees?: unknown;
 }

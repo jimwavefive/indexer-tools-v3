@@ -5,7 +5,6 @@ services:
       target: frontend-prod
       args:
         VITE_FEATURE_NOTIFICATIONS: "${VITE_FEATURE_NOTIFICATIONS:-false}"
-        VITE_FEATURE_AGENT: "${VITE_FEATURE_AGENT:-false}"
     ports:
       - "3000:3000"
     volumes:

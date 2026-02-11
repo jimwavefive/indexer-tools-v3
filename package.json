@@ -1,6 +1,6 @@
 {
-  "name": "indexer-tools-v3",
-  "version": "3.4.0",
+  "name": "indexer-tools",
+  "version": "4.0.0",
   "private": true,
   "scripts": {
     "dev": "pnpm --filter @indexer-tools/frontend dev",
@@ -10,7 +10,7 @@
     "build:backend": "pnpm --filter @indexer-tools/backend build",
     "start": "pnpm --filter @indexer-tools/frontend start",
     "start:backend": "pnpm --filter @indexer-tools/backend start",
-    "lint": "pnpm --filter @indexer-tools/frontend lint",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck"
   }
 }

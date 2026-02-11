@@ -17,28 +17,39 @@ COPY packages/backend/package.json packages/backend/
 RUN pnpm install
 
 # ============================================
-# Build shared package
+# Build & test shared package
 # ============================================
 FROM deps AS build-shared
-COPY packages/shared/ packages/shared/
+COPY packages/shared/src/ packages/shared/src/
+COPY packages/shared/tsup.config.ts packages/shared/
+COPY packages/shared/tsconfig.json packages/shared/
+COPY packages/shared/vitest.config.ts packages/shared/
+COPY packages/shared/package.json packages/shared/
 RUN pnpm --filter @indexer-tools/shared build
+RUN pnpm --filter @indexer-tools/shared test
 
 # ============================================
 # Build frontend
 # ============================================
 FROM build-shared AS build-frontend
 ARG VITE_FEATURE_NOTIFICATIONS=false
-ARG VITE_FEATURE_AGENT=false
 ENV VITE_FEATURE_NOTIFICATIONS=$VITE_FEATURE_NOTIFICATIONS
-ENV VITE_FEATURE_AGENT=$VITE_FEATURE_AGENT
-COPY packages/frontend/ packages/frontend/
+COPY packages/frontend/src/ packages/frontend/src/
+COPY packages/frontend/index.html packages/frontend/
+COPY packages/frontend/vite.config.ts packages/frontend/
+COPY packages/frontend/tsconfig.json packages/frontend/
+COPY packages/frontend/env.d.ts packages/frontend/
+COPY packages/frontend/package.json packages/frontend/
 RUN pnpm --filter @indexer-tools/frontend build
 
 # ============================================
 # Build backend
 # ============================================
 FROM build-shared AS build-backend
-COPY packages/backend/ packages/backend/
+COPY packages/backend/src/ packages/backend/src/
+COPY packages/backend/tsup.config.ts packages/backend/
+COPY packages/backend/tsconfig.json packages/backend/
+COPY packages/backend/package.json packages/backend/
 RUN pnpm --filter @indexer-tools/backend build
 
 # ============================================

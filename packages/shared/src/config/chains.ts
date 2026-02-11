@@ -1,4 +1,4 @@
-import type { ChainConfig, ChainId } from '../types/chain';
+import type { ChainConfig, ChainId } from '../types/chain.js';
 
 export const CHAIN_CONFIGS: Record<ChainId, ChainConfig> = {
   'mainnet': {
@@ -31,9 +31,6 @@ export const CHAIN_CONFIGS: Record<ChainId, ChainConfig> = {
   },
 };
 
-/**
- * Chain name mapping for DRPC and validation.
- */
 export const CHAIN_NAME_MAP: Record<string, string> = {
   'mainnet': 'ethereum',
   'arbitrum-one': 'arbitrum',

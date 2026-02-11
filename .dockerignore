@@ -1,5 +1,6 @@
 **/node_modules/
 **/dist/
+**/_v3-reference/
 .git/
 .github/
 .claude/
