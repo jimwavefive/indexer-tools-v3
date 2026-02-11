@@ -26,6 +26,16 @@
         class="filter-input filter-number"
       />
     </div>
+    <!-- Select filter -->
+    <select
+      v-else-if="filterType === 'select'"
+      :value="(column.getFilterValue() as string) ?? ''"
+      @change="handleSelectChange"
+      class="filter-input filter-select"
+    >
+      <option value="">All</option>
+      <option v-for="opt in options" :key="opt" :value="opt">{{ opt }}</option>
+    </select>
   </div>
 </template>
 
@@ -34,7 +44,8 @@ import type { Column } from '@tanstack/vue-table';
 
 const props = defineProps<{
   column: Column<any, unknown>;
-  filterType?: 'text' | 'number';
+  filterType?: 'text' | 'number' | 'select';
+  options?: string[];
 }>();
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -61,6 +72,11 @@ function handleRangeMax(e: Event) {
   const val = (e.target as HTMLInputElement).value;
   const current = (props.column.getFilterValue() as [number, number]) ?? [undefined, undefined];
   debounceSetFilter([current[0], val ? Number(val) : undefined]);
+}
+
+function handleSelectChange(e: Event) {
+  const val = (e.target as HTMLSelectElement).value;
+  props.column.setFilterValue(val || undefined);
 }
 </script>
 
@@ -107,5 +123,16 @@ function handleRangeMax(e: Event) {
 
 .filter-number[type='number'] {
   -moz-appearance: textfield;
+}
+
+.filter-select {
+  cursor: pointer;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23999'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.35rem center;
+  padding-right: 1.2rem;
 }
 </style>

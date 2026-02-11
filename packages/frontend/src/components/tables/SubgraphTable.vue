@@ -33,6 +33,7 @@
               <ColumnFilter
                 :column="header.column"
                 :filter-type="getFilterType(header.column.id)"
+                :options="getFilterOptions(header.column.id)"
               />
             </th>
           </tr>
@@ -145,8 +146,22 @@ const NUMBER_COLUMNS = new Set([
   'signalledTokens', 'proportion', 'stakedTokens',
 ]);
 
-function getFilterType(columnId: string): 'text' | 'number' {
+const SELECT_COLUMNS = new Set(['network']);
+
+function getFilterType(columnId: string): 'text' | 'number' | 'select' {
+  if (SELECT_COLUMNS.has(columnId)) return 'select';
   return NUMBER_COLUMNS.has(columnId) ? 'number' : 'text';
+}
+
+function getFilterOptions(columnId: string): string[] | undefined {
+  if (!SELECT_COLUMNS.has(columnId)) return undefined;
+  const values = new Set<string>();
+  for (const row of props.data) {
+    if (columnId === 'network' && row.network) {
+      values.add(row.network);
+    }
+  }
+  return [...values].sort();
 }
 
 function numberRangeFilter(row: any, columnId: string, filterValue: [number?, number?]) {
