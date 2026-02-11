@@ -3,6 +3,7 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { healthRouter } from './api/routes/health.js';
 import { createNotificationRoutes } from './api/routes/notifications.js';
+import { createBlacklistRoutes } from './api/routes/blacklist.js';
 import { SqliteStore } from './db/sqliteStore.js';
 import { PollingScheduler } from './services/poller/scheduler.js';
 import { SseManager } from './services/sse/SseManager.js';
@@ -111,6 +112,21 @@ await store.migrateFromJson();
 // Sync env-defined notification channels into the store
 await syncEnvChannels(store);
 
+// Seed blacklist from file (one-time, only if blacklist table is empty)
+try {
+  const { readFile } = await import('node:fs/promises');
+  const { existsSync } = await import('node:fs');
+  const blPath = process.env.BLACKLIST_FILE || './data/blacklist.txt';
+  if (existsSync(blPath)) {
+    const text = await readFile(blPath, 'utf-8');
+    const hashes = text.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+    const seeded = store.seedBlacklist(hashes);
+    if (seeded > 0) console.log(`Seeded ${seeded} blacklist entries from ${blPath}`);
+  }
+} catch (err) {
+  console.warn('Failed to seed blacklist from file:', err);
+}
+
 // SSE manager for real-time incident updates
 const sseManager = new SseManager();
 
@@ -162,6 +178,7 @@ app.get('/api/notifications/incidents/stream', (req, res) => {
 });
 
 app.use(generalLimiter, createNotificationRoutes(store, scheduler, sseManager));
+app.use(generalLimiter, createBlacklistRoutes(store));
 
 const server = app.listen(port, () => {
   console.log(`Indexer Tools v4 backend running on port ${port}`);

@@ -144,6 +144,12 @@ export class SqliteStore {
         value TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS blacklist (
+        ipfs_hash TEXT PRIMARY KEY,
+        added_at TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'manual'
+      );
+
       CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status);
       CREATE INDEX IF NOT EXISTS idx_incidents_rule_target ON incidents(rule_id, target_key);
       CREATE INDEX IF NOT EXISTS idx_history_incident ON history(incident_id);
@@ -470,5 +476,46 @@ export class SqliteStore {
     const result: Record<string, string> = {};
     for (const row of rows) result[row.key] = row.value;
     return result;
+  }
+
+  // --- Blacklist ---
+
+  getBlacklistEntries(): Array<{ ipfsHash: string; addedAt: string; source: string }> {
+    const rows = this.db.prepare('SELECT ipfs_hash, added_at, source FROM blacklist ORDER BY added_at DESC').all() as Array<{
+      ipfs_hash: string; added_at: string; source: string;
+    }>;
+    return rows.map((r) => ({ ipfsHash: r.ipfs_hash, addedAt: r.added_at, source: r.source }));
+  }
+
+  addBlacklistEntry(ipfsHash: string, source = 'manual'): void {
+    this.db.prepare(
+      'INSERT OR IGNORE INTO blacklist (ipfs_hash, added_at, source) VALUES (?, ?, ?)',
+    ).run(ipfsHash, new Date().toISOString(), source);
+  }
+
+  removeBlacklistEntry(ipfsHash: string): void {
+    this.db.prepare('DELETE FROM blacklist WHERE ipfs_hash = ?').run(ipfsHash);
+  }
+
+  seedBlacklist(hashes: string[]): number {
+    const existing = this.db.prepare('SELECT COUNT(*) as cnt FROM blacklist').get() as { cnt: number };
+    if (existing.cnt > 0) return 0;
+
+    let seeded = 0;
+    const insert = this.db.prepare(
+      'INSERT OR IGNORE INTO blacklist (ipfs_hash, added_at, source) VALUES (?, ?, ?)',
+    );
+    const now = new Date().toISOString();
+    const tx = this.db.transaction(() => {
+      for (const hash of hashes) {
+        const trimmed = hash.trim();
+        if (trimmed && !trimmed.startsWith('#')) {
+          insert.run(trimmed, now, 'file');
+          seeded++;
+        }
+      }
+    });
+    tx();
+    return seeded;
   }
 }

@@ -19,6 +19,10 @@
           <i class="pi pi-globe" style="margin-right: 0.5rem" />
           RPCs
         </Tab>
+        <Tab value="blacklist">
+          <i class="pi pi-ban" style="margin-right: 0.5rem" />
+          Blacklist
+        </Tab>
         <Tab value="feature-flags">
           <i class="pi pi-flag" style="margin-right: 0.5rem" />
           Feature Flags
@@ -36,6 +40,9 @@
         </TabPanel>
         <TabPanel value="rpcs">
           <RpcSettings />
+        </TabPanel>
+        <TabPanel value="blacklist">
+          <BlacklistManager />
         </TabPanel>
         <TabPanel value="feature-flags">
           <FeatureFlagsSettings />
@@ -56,6 +63,7 @@ import GeneralSettings from '../components/settings/GeneralSettings.vue';
 import DashboardColumns from '../components/settings/DashboardColumns.vue';
 import AccountsManager from '../components/settings/AccountsManager.vue';
 import RpcSettings from '../components/settings/RpcSettings.vue';
+import BlacklistManager from '../components/settings/BlacklistManager.vue';
 import FeatureFlagsSettings from '../components/settings/FeatureFlagsSettings.vue';
 
 const activeTab = ref('general');

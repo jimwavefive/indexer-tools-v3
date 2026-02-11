@@ -171,7 +171,14 @@ export const useSettingsStore = defineStore('settings', () => {
     { deep: true },
   );
 
-  // Computed: combined blacklist (file + manual)
+  // Backend blacklist entries (populated by BlacklistManager / useBlacklist)
+  let backendBlacklist: string[] = [];
+
+  function setBackendBlacklist(entries: string[]) {
+    backendBlacklist = entries;
+  }
+
+  // Computed: combined blacklist (file + manual + backend)
   function getCombinedBlacklist(): string[] {
     const manual = state.subgraphBlacklist
       ? state.subgraphBlacklist
@@ -179,7 +186,7 @@ export const useSettingsStore = defineStore('settings', () => {
           .map((l) => l.trim())
           .filter((l) => l && !l.startsWith('#'))
       : [];
-    return [...new Set([...fileBlacklist, ...manual])];
+    return [...new Set([...fileBlacklist, ...manual, ...backendBlacklist])];
   }
 
   // Active account
@@ -257,6 +264,7 @@ export const useSettingsStore = defineStore('settings', () => {
   return {
     state,
     fileBlacklist,
+    setBackendBlacklist,
     getCombinedBlacklist,
     getActiveAccount,
     switchAccount,
