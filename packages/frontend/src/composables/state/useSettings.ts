@@ -89,6 +89,9 @@ interface SettingsState {
   // Accounts
   accounts: Account[];
 
+  // Limit GQL subgraph queries to chains with active allocations
+  limitToIndexerChains: boolean;
+
   // Chain validation RPCs (per-chain, separate from main RPC overrides)
   chainValidationRpcs: Record<string, string>;
 }
@@ -135,6 +138,9 @@ export const useSettingsStore = defineStore('settings', () => {
 
     // Accounts — from runtime config or localStorage
     accounts: [],
+
+    // Limit to indexer's chains
+    limitToIndexerChains: true,
 
     // Chain validation RPCs
     chainValidationRpcs: {},

@@ -118,7 +118,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, h } from 'vue';
 import {
   useVueTable,
   createColumnHelper,
@@ -270,7 +270,15 @@ const columns = [
     id: 'statusChecks',
     header: 'Health',
     size: 120,
-    cell: (info) => info.getValue() || '\u2014',
+    cell: (info) => {
+      const row = info.row.original;
+      const color = row.healthColor;
+      const label = row.healthStatus || '\u2014';
+      return h('span', { class: 'health-cell' }, [
+        h('span', { class: `health-dot health-${color}` }),
+        label,
+      ]);
+    },
   }),
   columnHelper.accessor('displayName', {
     id: 'name',
@@ -521,4 +529,25 @@ const paddingBottom = computed(() =>
 .loading-row td {
   padding: 0;
 }
+
+/* Health dot indicators */
+:deep(.health-cell) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+:deep(.health-dot) {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+:deep(.health-green) { background: #4caf50; }
+:deep(.health-blue) { background: #2196f3; }
+:deep(.health-red) { background: #f44336; }
+:deep(.health-yellow) { background: #ff9800; }
+:deep(.health-default) { background: #9e9e9e; }
 </style>

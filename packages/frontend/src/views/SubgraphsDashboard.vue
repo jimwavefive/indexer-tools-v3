@@ -96,6 +96,10 @@
         <Checkbox v-model="settingsStore.state.hideZeroApr" :binary="true" input-id="hza" />
         <label for="hza">Hide 0% APR</label>
       </div>
+      <div class="filter-item checkbox-item">
+        <Checkbox v-model="settingsStore.state.limitToIndexerChains" :binary="true" input-id="lic" />
+        <label for="lic">Limit to indexer's chains</label>
+      </div>
     </div>
 
     <!-- Data table -->
@@ -116,12 +120,14 @@ import MultiSelect from 'primevue/multiselect';
 import Checkbox from 'primevue/checkbox';
 import SubgraphTable from '../components/tables/SubgraphTable.vue';
 import { useSubgraphs } from '../composables/queries/useSubgraphs';
+import { useAllocations } from '../composables/queries/useAllocations';
 import { useSettingsStore } from '../composables/state/useSettings';
 import { useAutoRefresh } from '../composables/util/useAutoRefresh';
 
 const settingsStore = useSettingsStore();
 
-const { enriched, filtered, availableNetworks, isLoading, refetch } = useSubgraphs();
+const { availableNetworks: indexerChains } = useAllocations();
+const { enriched, filtered, availableNetworks, isLoading, refetch } = useSubgraphs(indexerChains);
 
 // Debounced signal filter inputs
 function debounce(fn: (...args: unknown[]) => void, ms: number) {

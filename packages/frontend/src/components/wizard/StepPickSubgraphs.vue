@@ -1,6 +1,12 @@
 <template>
   <div class="step-pick-subgraphs">
-    <p class="step-hint">Select subgraphs to allocate to.</p>
+    <div class="step-toolbar">
+      <p class="step-hint">Select subgraphs to allocate to.</p>
+      <div class="filter-item checkbox-item">
+        <Checkbox v-model="settingsStore.state.limitToIndexerChains" :binary="true" input-id="lic-wizard" />
+        <label for="lic-wizard">Limit to indexer's chains</label>
+      </div>
+    </div>
     <SubgraphTable
       :data="data"
       :loading="loading"
@@ -12,8 +18,12 @@
 </template>
 
 <script setup lang="ts">
+import Checkbox from 'primevue/checkbox';
 import SubgraphTable from '../tables/SubgraphTable.vue';
 import type { EnrichedSubgraphRow } from '../../composables/queries/useSubgraphs';
+import { useSettingsStore } from '../../composables/state/useSettings';
+
+const settingsStore = useSettingsStore();
 
 defineProps<{
   data: EnrichedSubgraphRow[];
@@ -27,9 +37,26 @@ defineEmits<{
 </script>
 
 <style scoped>
+.step-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
 .step-hint {
   font-size: 0.85rem;
   color: var(--p-text-muted-color);
-  margin-bottom: 0.75rem;
+  margin: 0;
+}
+
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.checkbox-item label {
+  font-size: 0.85rem;
 }
 </style>

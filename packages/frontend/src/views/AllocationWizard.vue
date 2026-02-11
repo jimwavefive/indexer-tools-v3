@@ -128,12 +128,13 @@ const {
   enriched: allocEnriched,
   totals: allocTotals,
   isLoading: allocLoading,
+  availableNetworks: indexerChains,
 } = useAllocations();
 
 const {
   filtered: subFiltered,
   isLoading: subLoading,
-} = useSubgraphs();
+} = useSubgraphs(indexerChains);
 
 const { data: networkData } = useNetwork();
 const { data: accountData } = useAccount();

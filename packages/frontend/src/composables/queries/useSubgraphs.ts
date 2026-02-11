@@ -1,4 +1,4 @@
-import { computed } from 'vue';
+import { computed, type Ref } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 import { useChainStore } from '../state/useChain';
 import { useSettingsStore } from '../state/useSettings';
@@ -282,17 +282,26 @@ async function fetchAllSubgraphs(
   return allResults;
 }
 
-export function useSubgraphs() {
+export function useSubgraphs(indexerChains?: Ref<string[]>) {
   const chainStore = useChainStore();
   const settingsStore = useSettingsStore();
   const { networkClient } = useGraphClient();
   const { data: networkData } = useNetwork();
   const { data: accountData } = useAccount();
 
+  // When "Limit to indexer's chains" is enabled, use chains from active allocations
+  // for the GQL query filter; otherwise fall back to the manual network filter
+  const effectiveNetworkFilter = computed(() => {
+    if (settingsStore.state.limitToIndexerChains && indexerChains?.value?.length) {
+      return indexerChains.value;
+    }
+    return settingsStore.state.networkFilter;
+  });
+
   const queryKey = computed(() => [
     'subgraphs',
     chainStore.activeChainId,
-    settingsStore.state.networkFilter.join(','),
+    effectiveNetworkFilter.value.join(','),
   ]);
 
   const query = useQuery({
@@ -300,7 +309,7 @@ export function useSubgraphs() {
     queryFn: () =>
       fetchAllSubgraphs(
         networkClient.value,
-        settingsStore.state.networkFilter,
+        effectiveNetworkFilter.value,
         '0', // minSignal for the GraphQL query -- we filter client-side
       ),
     staleTime: 120_000, // 2 minutes
