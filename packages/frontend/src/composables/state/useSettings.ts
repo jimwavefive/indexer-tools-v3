@@ -29,7 +29,7 @@ const DEFAULT_SUBGRAPH_COLUMNS: ColumnSetting[] = [
   { id: 'signalledTokens', title: 'Current Signal', visible: true },
   { id: 'proportion', title: 'Current Proportion', visible: true },
   { id: 'stakedTokens', title: 'Current Allocations', visible: false },
-  { id: 'deploymentId', title: 'Deployment ID', visible: false },
+  { id: 'deploymentId', title: 'Deployment ID', visible: true },
 ];
 
 const DEFAULT_ALLOCATION_COLUMNS: ColumnSetting[] = [

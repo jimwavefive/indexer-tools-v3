@@ -17,6 +17,14 @@
           <label for="auto-apr-wizard">Auto Target APR</label>
         </div>
         <div class="filter-item checkbox-item">
+          <Checkbox v-model="settingsStore.state.hideCurrentlyAllocated" :binary="true" input-id="hca-wizard" />
+          <label for="hca-wizard">Hide Allocated</label>
+        </div>
+        <div class="filter-item checkbox-item">
+          <Checkbox v-model="settingsStore.state.activateBlacklist" :binary="true" input-id="bl-wizard" />
+          <label for="bl-wizard">Hide Blacklisted</label>
+        </div>
+        <div class="filter-item checkbox-item">
           <Checkbox v-model="settingsStore.state.limitToIndexerChains" :binary="true" input-id="lic-wizard" />
           <label for="lic-wizard">Limit GQL to Indexer's chains</label>
         </div>
