@@ -7,6 +7,10 @@ import 'primeicons/primeicons.css';
 
 import App from './App.vue';
 import router from './router';
+import { loadRuntimeConfig } from '../plugins/defaults';
+
+// Load runtime config before mounting (fetches /indexer-tools-config.json + /blacklist.txt)
+await loadRuntimeConfig();
 
 const app = createApp(App);
 
