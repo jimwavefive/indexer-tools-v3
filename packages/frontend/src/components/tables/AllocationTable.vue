@@ -177,7 +177,11 @@ const NUMBER_COLUMNS = new Set([
   'pendingRewards', 'pendingRewardsCut', 'signalledTokens', 'proportion', 'stakedTokens',
 ]);
 
-const SELECT_COLUMNS = new Set(['status', 'network']);
+const SELECT_COLUMNS = new Set(['status', 'network', 'statusChecks']);
+
+const STATUS_CHECK_OPTIONS = [
+  'Closeable', 'Synced', 'Syncing', 'Failed', 'Deterministic', 'Non-deterministic',
+];
 
 function getFilterType(columnId: string): 'text' | 'number' | 'select' {
   if (SELECT_COLUMNS.has(columnId)) return 'select';
@@ -186,6 +190,7 @@ function getFilterType(columnId: string): 'text' | 'number' | 'select' {
 
 function getFilterOptions(columnId: string): string[] | undefined {
   if (!SELECT_COLUMNS.has(columnId)) return undefined;
+  if (columnId === 'statusChecks') return STATUS_CHECK_OPTIONS;
   const values = new Set<string>();
   for (const row of props.data) {
     if (columnId === 'status') {
@@ -195,6 +200,27 @@ function getFilterOptions(columnId: string): string[] | undefined {
     }
   }
   return [...values].sort();
+}
+
+function statusCheckFilter(row: any, _columnId: string, filterValue: string) {
+  const original = row.original;
+  const hs = original.healthStatus as string;
+  switch (filterValue) {
+    case 'Closeable':
+      return hs === 'Synced' || hs === 'Failed (Deterministic)';
+    case 'Synced':
+      return hs === 'Synced';
+    case 'Syncing':
+      return hs === 'Syncing';
+    case 'Failed':
+      return hs.startsWith('Failed');
+    case 'Deterministic':
+      return hs === 'Failed (Deterministic)';
+    case 'Non-deterministic':
+      return hs === 'Failed (Non-deterministic)';
+    default:
+      return true;
+  }
 }
 
 function numberRangeFilter(row: any, columnId: string, filterValue: [number?, number?]) {
@@ -269,13 +295,25 @@ const columns = [
   columnHelper.accessor('healthStatus', {
     id: 'statusChecks',
     header: 'Health',
-    size: 120,
+    size: 140,
+    filterFn: statusCheckFilter,
     cell: (info) => {
       const row = info.row.original;
-      const color = row.healthColor;
       const label = row.healthStatus || '\u2014';
+
+      // Dot 1: Synced
+      const syncedColor = row.healthSynced === true
+        ? 'health-green'
+        : row.healthSynced === false ? 'health-red' : 'health-default';
+
+      // Dot 2: Deterministic failure
+      const detColor = row.healthDeterministic === true
+        ? 'health-red'
+        : row.healthDeterministic === false ? 'health-yellow' : 'health-default';
+
       return h('span', { class: 'health-cell' }, [
-        h('span', { class: `health-dot health-${color}` }),
+        h('span', { class: `health-dot ${syncedColor}`, title: 'Synced' }),
+        h('span', { class: `health-dot ${detColor}`, title: 'Deterministic' }),
         label,
       ]);
     },

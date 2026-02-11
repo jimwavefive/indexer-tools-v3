@@ -87,6 +87,8 @@ export interface EnrichedAllocationRow {
   currentVersionHash: string | null;
   healthStatus: string;
   healthColor: string;
+  healthSynced: boolean | null;
+  healthDeterministic: boolean | null;
 }
 
 // ---------- Enrichment ----------
@@ -188,6 +190,8 @@ export function enrichAllocations(
       currentVersionHash,
       healthStatus: '',
       healthColor: 'default',
+      healthSynced: null,
+      healthDeterministic: null,
     };
   }
 
@@ -307,6 +311,8 @@ export function useAllocations() {
         if (ds) {
           row.healthStatus = ds.statusLabel;
           row.healthColor = ds.statusColor;
+          row.healthSynced = ds.synced;
+          row.healthDeterministic = ds.fatalError?.deterministic ?? null;
         }
       }
     }
