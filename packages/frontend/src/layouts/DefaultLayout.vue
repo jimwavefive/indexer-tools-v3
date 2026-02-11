@@ -166,14 +166,9 @@ function truncateAddress(addr: string): string {
   font-size: 0.85rem;
   padding: 0.25rem 0.75rem;
   border-radius: 1rem;
-  background: var(--p-surface-200);
-  color: var(--p-surface-800);
+  background: var(--app-badge-bg);
+  color: var(--app-badge-text);
   white-space: nowrap;
-}
-
-:deep(.dark-mode) .account-badge {
-  background: var(--p-surface-700);
-  color: var(--p-surface-100);
 }
 
 .nav-list {
@@ -190,11 +185,7 @@ function truncateAddress(addr: string): string {
 }
 
 .nav-item:hover {
-  background: var(--p-surface-100);
-}
-
-:deep(.dark-mode) .nav-item:hover {
-  background: var(--p-surface-800);
+  background: var(--app-table-row-hover);
 }
 
 .nav-item.router-link-active {

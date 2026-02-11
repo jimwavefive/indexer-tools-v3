@@ -392,22 +392,14 @@ const paddingBottom = computed(() =>
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--p-surface-0);
-}
-
-:deep(.dark-mode) .allocation-table thead {
-  background: var(--p-surface-900);
+  background: var(--app-table-bg);
 }
 
 .allocation-table tfoot {
   position: sticky;
   bottom: 0;
   z-index: 1;
-  background: var(--p-surface-0);
-}
-
-:deep(.dark-mode) .allocation-table tfoot {
-  background: var(--p-surface-900);
+  background: var(--app-table-bg);
 }
 
 .th-cell {
@@ -415,12 +407,8 @@ const paddingBottom = computed(() =>
   text-align: left;
   font-weight: 600;
   white-space: nowrap;
-  border-bottom: 2px solid var(--p-surface-200);
+  border-bottom: 2px solid var(--app-surface-border-strong);
   user-select: none;
-}
-
-:deep(.dark-mode) .th-cell {
-  border-bottom-color: var(--p-surface-700);
 }
 
 .th-content {
@@ -443,27 +431,15 @@ const paddingBottom = computed(() =>
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  border-bottom: 1px solid var(--p-surface-100);
-}
-
-:deep(.dark-mode) .td-cell {
-  border-bottom-color: var(--p-surface-800);
+  border-bottom: 1px solid var(--app-surface-border);
 }
 
 .data-row:hover {
-  background: var(--p-surface-50);
-}
-
-:deep(.dark-mode) .data-row:hover {
-  background: var(--p-surface-800);
+  background: var(--app-table-row-hover);
 }
 
 .footer-row {
-  border-top: 2px solid var(--p-surface-200);
-}
-
-:deep(.dark-mode) .footer-row {
-  border-top-color: var(--p-surface-700);
+  border-top: 2px solid var(--app-surface-border-strong);
 }
 
 .footer-cell {

@@ -137,7 +137,7 @@ const settingsStore = useSettingsStore();
   gap: 0.5rem;
   padding: 0.25rem 0.5rem;
   border-radius: var(--p-border-radius);
-  border: 1px solid var(--p-surface-200);
+  border: 1px solid var(--app-surface-border);
 }
 .column-label {
   flex: 1;

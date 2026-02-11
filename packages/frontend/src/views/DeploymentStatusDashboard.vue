@@ -242,7 +242,7 @@ const rows = computed(() => table.getRowModel().rows);
   font-weight: 600;
   white-space: nowrap;
   border-bottom: 2px solid var(--p-content-border-color);
-  background: var(--p-surface-50);
+  background: var(--app-table-header-bg);
   user-select: none;
 }
 
@@ -263,7 +263,7 @@ const rows = computed(() => table.getRowModel().rows);
 }
 
 .data-row:hover {
-  background: var(--p-surface-hover);
+  background: var(--app-table-row-hover);
 }
 
 .empty-row {

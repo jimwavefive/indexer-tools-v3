@@ -165,13 +165,9 @@ function sliderMax(ipfsHash: string): number {
 }
 
 .allocation-row {
-  border: 1px solid var(--p-surface-200);
+  border: 1px solid var(--app-surface-border);
   border-radius: var(--p-border-radius);
   padding: 0.75rem 1rem;
-}
-
-:deep(.dark-mode) .allocation-row {
-  border-color: var(--p-surface-700);
 }
 
 .row-header {

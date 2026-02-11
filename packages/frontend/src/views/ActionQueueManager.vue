@@ -459,7 +459,7 @@ if (isConnected.value) fetchActions();
   gap: 0.75rem;
   margin-bottom: 1rem;
   padding: 0.5rem 0.75rem;
-  background: var(--p-surface-50);
+  background: var(--app-table-header-bg);
   border-radius: 6px;
   font-size: 0.8rem;
 }
@@ -529,7 +529,7 @@ if (isConnected.value) fetchActions();
   font-weight: 600;
   white-space: nowrap;
   border-bottom: 2px solid var(--p-content-border-color);
-  background: var(--p-surface-50);
+  background: var(--app-table-header-bg);
   user-select: none;
 }
 
@@ -550,7 +550,7 @@ if (isConnected.value) fetchActions();
 }
 
 .data-row:hover {
-  background: var(--p-surface-hover);
+  background: var(--app-table-row-hover);
 }
 
 .empty-row {

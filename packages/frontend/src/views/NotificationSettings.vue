@@ -632,14 +632,9 @@ onUnmounted(() => {
 
 .rule-card,
 .channel-card {
-  border: 1px solid var(--p-surface-200);
+  border: 1px solid var(--app-surface-border);
   border-radius: var(--p-border-radius);
   padding: 0.75rem 1rem;
-}
-
-:deep(.dark-mode) .rule-card,
-:deep(.dark-mode) .channel-card {
-  border-color: var(--p-surface-700);
 }
 
 .card-header {
@@ -658,13 +653,8 @@ onUnmounted(() => {
   font-size: 0.75rem;
   padding: 0.1rem 0.4rem;
   border-radius: 3px;
-  background: var(--p-surface-100);
+  background: var(--app-surface-elevated);
   color: var(--p-text-muted-color);
-}
-
-:deep(.dark-mode) .rule-type,
-:deep(.dark-mode) .channel-type {
-  background: var(--p-surface-800);
 }
 
 .card-meta {

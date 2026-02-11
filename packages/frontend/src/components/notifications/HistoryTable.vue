@@ -168,11 +168,7 @@ const columnCount = computed(() => table.getHeaderGroups()[0]?.headers.length ??
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--p-surface-0);
-}
-
-:deep(.dark-mode) .history-table thead {
-  background: var(--p-surface-900);
+  background: var(--app-table-bg);
 }
 
 .th-cell {
@@ -180,12 +176,8 @@ const columnCount = computed(() => table.getHeaderGroups()[0]?.headers.length ??
   text-align: left;
   font-weight: 600;
   white-space: nowrap;
-  border-bottom: 2px solid var(--p-surface-200);
+  border-bottom: 2px solid var(--app-surface-border-strong);
   user-select: none;
-}
-
-:deep(.dark-mode) .th-cell {
-  border-bottom-color: var(--p-surface-700);
 }
 
 .th-content {
@@ -203,19 +195,11 @@ const columnCount = computed(() => table.getHeaderGroups()[0]?.headers.length ??
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  border-bottom: 1px solid var(--p-surface-100);
-}
-
-:deep(.dark-mode) .td-cell {
-  border-bottom-color: var(--p-surface-800);
+  border-bottom: 1px solid var(--app-surface-border);
 }
 
 .data-row:hover {
-  background: var(--p-surface-50);
-}
-
-:deep(.dark-mode) .data-row:hover {
-  background: var(--p-surface-800);
+  background: var(--app-table-row-hover);
 }
 
 .no-data {
@@ -232,10 +216,6 @@ const columnCount = computed(() => table.getHeaderGroups()[0]?.headers.length ??
   padding: 0.5rem 0.75rem;
   font-size: 0.85rem;
   color: var(--p-text-muted-color);
-  border-top: 1px solid var(--p-surface-200);
-}
-
-:deep(.dark-mode) .table-footer {
-  border-top-color: var(--p-surface-700);
+  border-top: 1px solid var(--app-surface-border);
 }
 </style>

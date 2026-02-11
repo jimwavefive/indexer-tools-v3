@@ -77,14 +77,10 @@ defineProps<{
 }
 
 .poi-card {
-  border: 1px solid var(--p-surface-200);
+  border: 1px solid var(--app-surface-border);
   border-radius: var(--p-border-radius);
   padding: 1rem;
   margin-bottom: 0.75rem;
-}
-
-:deep(.dark-mode) .poi-card {
-  border-color: var(--p-surface-700);
 }
 
 .poi-header {

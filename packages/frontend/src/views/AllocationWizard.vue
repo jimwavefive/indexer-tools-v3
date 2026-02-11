@@ -448,14 +448,9 @@ watch(
   justify-content: center;
   gap: 0.25rem;
   padding: 0.5rem 1rem;
-  background: var(--p-surface-0);
-  border-top: 1px solid var(--p-surface-200);
+  background: var(--app-table-bg);
+  border-top: 1px solid var(--app-surface-border-strong);
   z-index: 100;
-}
-
-:deep(.dark-mode) .wizard-footer {
-  background: var(--p-surface-900);
-  border-top-color: var(--p-surface-700);
 }
 
 .footer-card {
