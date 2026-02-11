@@ -165,6 +165,7 @@ export class SqliteStore {
       'ALTER TABLE rules ADD COLUMN polling_interval_minutes INTEGER',
       'ALTER TABLE rules ADD COLUMN last_polled_at TEXT',
       "ALTER TABLE rules ADD COLUMN channel_ids TEXT NOT NULL DEFAULT '[]'",
+      'ALTER TABLE rules ADD COLUMN group_incidents INTEGER NOT NULL DEFAULT 0',
     ];
 
     for (const sql of migrations) {
@@ -260,6 +261,7 @@ export class SqliteStore {
     const rows = this.db.prepare('SELECT * FROM rules').all() as Array<{
       id: string; name: string; type: string; enabled: number; conditions: string;
       polling_interval_minutes: number | null; last_polled_at: string | null; channel_ids: string;
+      group_incidents: number;
     }>;
     return rows.map((r) => ({
       id: r.id, name: r.name, type: r.type, enabled: r.enabled === 1,
@@ -267,18 +269,20 @@ export class SqliteStore {
       pollingIntervalMinutes: r.polling_interval_minutes,
       lastPolledAt: r.last_polled_at,
       channelIds: JSON.parse(r.channel_ids || '[]'),
+      groupIncidents: r.group_incidents === 1,
     }));
   }
 
   async saveRules(rules: RuleConfig[]): Promise<void> {
     const insert = this.db.prepare(
-      'INSERT OR REPLACE INTO rules (id, name, type, enabled, conditions, polling_interval_minutes, last_polled_at, channel_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT OR REPLACE INTO rules (id, name, type, enabled, conditions, polling_interval_minutes, last_polled_at, channel_ids, group_incidents) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     );
     const tx = this.db.transaction(() => {
       this.db.prepare('DELETE FROM rules').run();
       for (const r of rules) {
         insert.run(r.id, r.name, r.type, r.enabled ? 1 : 0, JSON.stringify(r.conditions),
-          r.pollingIntervalMinutes ?? null, r.lastPolledAt ?? null, JSON.stringify(r.channelIds ?? []));
+          r.pollingIntervalMinutes ?? null, r.lastPolledAt ?? null, JSON.stringify(r.channelIds ?? []),
+          r.groupIncidents ? 1 : 0);
       }
     });
     tx();

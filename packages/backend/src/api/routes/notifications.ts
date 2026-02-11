@@ -653,6 +653,7 @@ export function createNotificationRoutes(store: SqliteStore, scheduler?: Polling
         conditions: body.conditions ?? {},
         pollingIntervalMinutes: body.pollingIntervalMinutes ?? null,
         channelIds: body.channelIds ?? [],
+        groupIncidents: body.groupIncidents ?? false,
       };
 
       const rules = await store.getRules();

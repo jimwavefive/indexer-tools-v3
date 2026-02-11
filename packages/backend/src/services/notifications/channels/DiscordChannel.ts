@@ -91,7 +91,7 @@ const METADATA_LABELS: Record<string, string> = {
   blocksBehindThreshold: 'Blocks Behind Threshold',
 };
 
-const METADATA_HIDDEN = new Set(['allocationId', 'deploymentIpfsHash', 'subgraphId', 'subgraphName', 'subgraphs', 'count']);
+const METADATA_HIDDEN = new Set(['allocationId', 'deploymentIpfsHash', 'subgraphId', 'subgraphName', 'subgraphs', 'count', 'allocations']);
 
 // Preferred display order -- keys not listed here appear at the end in original order
 const METADATA_ORDER: string[] = [
@@ -184,14 +184,39 @@ export class DiscordChannel implements Channel {
 
     if (notification.metadata) {
       const meta = notification.metadata;
-      const oldHash = meta.currentDeploymentHash || meta.deploymentIpfsHash;
-      const newHash = meta.latestDeploymentHash;
 
-      if (oldHash) {
-        description += `\n**Old Deployment**\n\`${oldHash}\``;
-      }
-      if (newHash) {
-        description += `\n**New Deployment**\n\`${newHash}\``;
+      // Grouped notification — render allocations as a table
+      if (Array.isArray(meta.allocations) && meta.allocations.length > 0) {
+        const allocs = meta.allocations as Array<Record<string, unknown>>;
+        const rows = allocs.map((a) => {
+          const name = (a.subgraphName as string) || 'Unknown';
+          const epochs = a.epochDuration !== undefined ? String(a.epochDuration) : '?';
+          const threshold = a.thresholdEpochs !== undefined ? String(a.thresholdEpochs) : '?';
+          return { name, epochs, threshold };
+        });
+
+        const nameW = Math.max(4, ...rows.map((r) => r.name.length));
+        const epochW = Math.max(6, ...rows.map((r) => r.epochs.length));
+        const threshW = Math.max(9, ...rows.map((r) => r.threshold.length));
+
+        let table = '```\n';
+        table += `${'Name'.padEnd(nameW)}  ${'Epochs'.padStart(epochW)}  ${'Threshold'.padStart(threshW)}\n`;
+        table += '\u2500'.repeat(nameW + epochW + threshW + 4) + '\n';
+        for (const row of rows) {
+          table += `${row.name.padEnd(nameW)}  ${row.epochs.padStart(epochW)}  ${row.threshold.padStart(threshW)}\n`;
+        }
+        table += '```';
+        description = table;
+      } else {
+        const oldHash = meta.currentDeploymentHash || meta.deploymentIpfsHash;
+        const newHash = meta.latestDeploymentHash;
+
+        if (oldHash) {
+          description += `\n**Old Deployment**\n\`${oldHash}\``;
+        }
+        if (newHash) {
+          description += `\n**New Deployment**\n\`${newHash}\``;
+        }
       }
     }
 

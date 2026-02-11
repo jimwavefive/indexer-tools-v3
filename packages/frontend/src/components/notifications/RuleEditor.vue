@@ -30,6 +30,12 @@
         <ToggleSwitch v-model="form.enabled" />
       </div>
 
+      <div class="field">
+        <label>Group incidents</label>
+        <div class="field-hint">Combine all alerts from this rule into a single grouped incident</div>
+        <ToggleSwitch v-model="form.groupIncidents" />
+      </div>
+
       <!-- Type-specific conditions -->
       <template v-if="form.type === 'allocation_duration'">
         <div class="field">
@@ -139,6 +145,7 @@ const form = reactive<{
   name: string;
   type: string;
   enabled: boolean;
+  groupIncidents: boolean;
   conditions: Record<string, unknown>;
   pollingIntervalMinutes: number | null;
   channelIds: string[];
@@ -146,6 +153,7 @@ const form = reactive<{
   name: '',
   type: '',
   enabled: true,
+  groupIncidents: false,
   conditions: {},
   pollingIntervalMinutes: null,
   channelIds: [],
@@ -160,6 +168,7 @@ watch(
       form.name = props.editingRule.name;
       form.type = props.editingRule.type;
       form.enabled = props.editingRule.enabled;
+      form.groupIncidents = props.editingRule.groupIncidents ?? false;
       form.conditions = { ...props.editingRule.conditions };
       form.pollingIntervalMinutes = props.editingRule.pollingIntervalMinutes ?? null;
       form.channelIds = [...(props.editingRule.channelIds ?? [])];
@@ -167,6 +176,7 @@ watch(
       form.name = '';
       form.type = '';
       form.enabled = true;
+      form.groupIncidents = false;
       form.conditions = {};
       form.pollingIntervalMinutes = null;
       form.channelIds = [];
@@ -181,6 +191,7 @@ function handleSubmit() {
     name: form.name,
     type: form.type,
     enabled: form.enabled,
+    groupIncidents: form.groupIncidents,
     conditions: { ...form.conditions },
     pollingIntervalMinutes: form.pollingIntervalMinutes,
     channelIds: form.channelIds,
@@ -207,6 +218,11 @@ defineExpose({ resetSubmitting: () => { submitting.value = false; } });
 .field label {
   font-size: 0.8rem;
   font-weight: 500;
+  color: var(--p-text-muted-color);
+}
+
+.field-hint {
+  font-size: 0.75rem;
   color: var(--p-text-muted-color);
 }
 

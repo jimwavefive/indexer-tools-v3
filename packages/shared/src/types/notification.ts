@@ -7,6 +7,7 @@ export interface RuleConfig {
   pollingIntervalMinutes?: number | null;
   lastPolledAt?: string | null;
   channelIds?: string[];
+  groupIncidents?: boolean;
 }
 
 export interface ChannelConfig {

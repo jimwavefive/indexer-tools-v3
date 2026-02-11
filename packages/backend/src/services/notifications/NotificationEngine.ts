@@ -99,6 +99,7 @@ export class NotificationEngine {
     const filterSummaries = new Map<string, string>();
 
     for (const rule of rules) {
+      const ruleConfig = ruleConfigs.find((r) => r.id === rule.id);
       const result = rule.evaluate(context);
 
       if (result.filterSummary) {
@@ -107,8 +108,36 @@ export class NotificationEngine {
 
       if (!result.triggered) continue;
 
-      for (const notification of result.notifications) {
-        const { key: targetKey, label: targetLabel } = deriveTargetKey(rule.id, notification);
+      // If groupIncidents is enabled, merge all notifications into one grouped notification
+      let notifications = result.notifications;
+      if (ruleConfig?.groupIncidents && notifications.length > 0) {
+        const allocations = notifications.map((n) => ({
+          ...n.metadata,
+          title: n.title,
+        }));
+        const grouped: Notification = {
+          title: `${notifications.length} ${ruleConfig.name || rule.id} alerts`,
+          message: notifications[0].message,
+          severity: notifications.reduce(
+            (worst, n) =>
+              n.severity === 'critical' ? 'critical' : n.severity === 'warning' && worst !== 'critical' ? 'warning' : worst,
+            notifications[0].severity,
+          ),
+          timestamp: nowIso,
+          ruleId: rule.id,
+          metadata: {
+            allocations,
+            count: notifications.length,
+          },
+        };
+        notifications = [grouped];
+      }
+
+      for (const notification of notifications) {
+        // For grouped notifications, use rule-group target key instead of per-allocation
+        const { key: targetKey, label: targetLabel } = ruleConfig?.groupIncidents
+          ? { key: `rule-group:${rule.id}`, label: `${ruleConfig.name || rule.id} (grouped)` }
+          : deriveTargetKey(rule.id, notification);
         const incidentKey = `${rule.id}:${targetKey}`;
         firedKeys.add(incidentKey);
 
