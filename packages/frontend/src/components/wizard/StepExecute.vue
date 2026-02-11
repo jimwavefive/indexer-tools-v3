@@ -247,7 +247,7 @@ const rowSelection = ref<RowSelectionState>({});
 
 const selectedIds = computed(() => {
   const selectedRows = table.getSelectedRowModel().rows;
-  return selectedRows.map((r) => r.original.id);
+  return selectedRows.map((r) => String(r.original.id));
 });
 
 function truncateHash(hash: string): string {
