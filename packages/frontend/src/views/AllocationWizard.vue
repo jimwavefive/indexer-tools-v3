@@ -41,9 +41,13 @@
             :available-stake-grt="availableStakeGrt"
             :min-allocation="wizardStore.minAllocation"
             :min-allocation0-signal="wizardStore.minAllocation0Signal"
+            :target-apr="targetApr"
+            :auto-target-apr="autoTargetApr"
             @update:allocation="onAllocationUpdate"
             @update:min-allocation="wizardStore.minAllocation = $event"
             @update:min-allocation0-signal="wizardStore.minAllocation0Signal = $event"
+            @update:target-apr="targetApr = $event"
+            @update:auto-target-apr="autoTargetApr = $event"
             @set-max-allos="handleSetMaxAllos"
             @reset-allos="wizardStore.resetAllos()"
           />
@@ -104,8 +108,9 @@ import {
   calculateNewApr,
   calculateSubgraphDailyRewards,
   maxAllo,
+  calculateAutoTargetApr,
 } from '@indexer-tools/shared';
-import type { NetworkState } from '@indexer-tools/shared';
+import type { NetworkState, SelectedSubgraph, FutureStakedEntry } from '@indexer-tools/shared';
 import StepCloseAllocations from '../components/wizard/StepCloseAllocations.vue';
 import StepCustomPOIs from '../components/wizard/StepCustomPOIs.vue';
 import StepPickSubgraphs from '../components/wizard/StepPickSubgraphs.vue';
@@ -142,6 +147,11 @@ const { data: networkData } = useNetwork();
 const { data: accountData } = useAccount();
 
 const tableHeight = computed(() => Math.max(window.innerHeight - 320, 400));
+
+// ---------- Auto APR ----------
+
+const autoTargetApr = ref(false);
+const targetApr = ref(10);
 
 // ---------- Closing allocations (Step 1 → 2) ----------
 
@@ -217,7 +227,7 @@ const wizardSubgraphs = computed<WizardSubgraphRow[]>(() => {
     issuancePerBlock: network.issuancePerBlock,
   };
   const rewardCut = accountData.value?.rewardCut ?? 0;
-  const targetApr = 10; // default target for maxAllo
+  const targetAprVal = targetApr.value;
 
   return selected.map((sub) => {
     const newAlloGrt = wizardStore.newAllocations[sub.ipfsHash] ?? 0;
@@ -244,7 +254,7 @@ const wizardSubgraphs = computed<WizardSubgraphRow[]>(() => {
 
     const maxAlloVal =
       sub.signalledTokens > 0n
-        ? maxAllo(targetApr, sub.signalledTokens, networkData2, futureStaked)
+        ? maxAllo(targetAprVal, sub.signalledTokens, networkData2, futureStaked)
         : 0;
 
     return {
@@ -327,6 +337,54 @@ const selectedMaxAllos = computed(() => {
   }
   return sum;
 });
+
+// ---------- Auto APR computation ----------
+
+// Compute auto target APR when toggled on
+watch(
+  [autoTargetApr, () => wizardStore.selectedSubgraphHashes, closingStake, networkData, accountData],
+  () => {
+    if (!autoTargetApr.value) return;
+    const network = networkData.value;
+    if (!network) return;
+
+    const hashes = new Set(wizardStore.selectedSubgraphHashes);
+    const selected = subFiltered.value.filter((s) => hashes.has(s.ipfsHash));
+    if (selected.length === 0) return;
+
+    const selectedSubgraphs: SelectedSubgraph[] = selected.map((s) => ({
+      deployment: {
+        deniedAt: s.deniedAt,
+        signalledTokens: s.signalledTokens,
+      },
+    }));
+
+    const futureStakedTokens: FutureStakedEntry[] = selected.map((s) => ({
+      futureStakedTokens: s.stakedTokens - (closingAlloByHash.value.get(s.ipfsHash) ?? 0n),
+    }));
+
+    const networkData2 = {
+      totalTokensSignalled: network.totalTokensSignalled,
+      issuancePerYear: network.issuancePerYear,
+      issuancePerBlock: network.issuancePerBlock,
+    };
+
+    const computed_apr = calculateAutoTargetApr(
+      selectedSubgraphs,
+      futureStakedTokens,
+      networkData2,
+      accountData.value?.availableStake ?? 0n,
+      closingStake.value,
+    );
+
+    if (computed_apr > 0) {
+      targetApr.value = Math.round(computed_apr * 100) / 100;
+      // Trigger redistribution with new APR
+      handleSetMaxAllos();
+    }
+  },
+  { deep: true },
+);
 
 // ---------- Commands (Step 5) ----------
 

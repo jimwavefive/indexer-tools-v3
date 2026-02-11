@@ -3,6 +3,20 @@
     <!-- Controls -->
     <div class="controls-row">
       <div class="field-inline">
+        <label>Target APR (%)</label>
+        <InputText
+          :model-value="String(targetApr)"
+          @update:model-value="$emit('update:targetApr', Number($event))"
+          type="number"
+          :disabled="autoTargetApr"
+          style="width: 8rem"
+        />
+      </div>
+      <div class="field-inline checkbox-field">
+        <Checkbox v-model="localAutoTargetApr" :binary="true" input-id="auto-apr" />
+        <label for="auto-apr">Auto Target APR</label>
+      </div>
+      <div class="field-inline">
         <label>Min Allocation</label>
         <InputText
           :model-value="String(minAllocation)"
@@ -76,9 +90,11 @@
 </template>
 
 <script setup lang="ts">
+import { ref, watch } from 'vue';
 import InputText from 'primevue/inputtext';
 import Slider from 'primevue/slider';
 import Button from 'primevue/button';
+import Checkbox from 'primevue/checkbox';
 import { formatApr } from '@indexer-tools/shared';
 
 export interface WizardSubgraphRow {
@@ -100,15 +116,24 @@ const props = defineProps<{
   availableStakeGrt: number;
   minAllocation: number;
   minAllocation0Signal: number;
+  targetApr: number;
+  autoTargetApr: boolean;
 }>();
 
 const emit = defineEmits<{
   'update:allocation': [ipfsHash: string, amount: number];
   'update:minAllocation': [value: number];
   'update:minAllocation0Signal': [value: number];
+  'update:targetApr': [value: number];
+  'update:autoTargetApr': [value: boolean];
   'setMaxAllos': [];
   'resetAllos': [];
 }>();
+
+// Local toggle synced to parent
+const localAutoTargetApr = ref(props.autoTargetApr);
+watch(() => props.autoTargetApr, (v) => { localAutoTargetApr.value = v; });
+watch(localAutoTargetApr, (v) => { emit('update:autoTargetApr', v); });
 
 // Debounced slider updates
 const sliderTimers: Record<string, ReturnType<typeof setTimeout>> = {};
@@ -150,6 +175,16 @@ function sliderMax(ipfsHash: string): number {
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--p-text-muted-color);
+}
+
+.checkbox-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.checkbox-field label {
+  font-size: 0.85rem;
 }
 
 .empty-state {
