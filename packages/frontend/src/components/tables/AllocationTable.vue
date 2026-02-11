@@ -18,11 +18,10 @@
             <th
               v-for="header in headerGroup.headers"
               :key="header.id"
-              :style="{ width: `${header.getSize()}px`, cursor: header.column.getCanSort() ? 'pointer' : 'default' }"
-              @click="header.column.getToggleSortingHandler()?.($event)"
+              :style="{ width: `${header.getSize()}px` }"
               class="th-cell"
             >
-              <div class="th-content">
+              <div class="th-content" @click.stop="header.column.getToggleSortingHandler()?.($event)">
                 <FlexRender
                   :render="header.column.columnDef.header"
                   :props="header.getContext()"
@@ -31,6 +30,10 @@
                   {{ header.column.getIsSorted() === 'asc' ? '\u25B2' : '\u25BC' }}
                 </span>
               </div>
+              <ColumnFilter
+                :column="header.column"
+                :filter-type="getFilterType(header.column.id)"
+              />
             </th>
           </tr>
         </thead>
@@ -121,9 +124,11 @@ import {
   createColumnHelper,
   getCoreRowModel,
   getSortedRowModel,
+  getFilteredRowModel,
   FlexRender,
   type SortingState,
   type RowSelectionState,
+  type ColumnFiltersState,
 } from '@tanstack/vue-table';
 import { useVirtualizer } from '@tanstack/vue-virtual';
 import Checkbox from 'primevue/checkbox';
@@ -131,6 +136,7 @@ import ProgressBar from 'primevue/progressbar';
 import { formatGrt, formatApr, weiToNumber } from '@indexer-tools/shared';
 import type { EnrichedAllocationRow, AllocationTotals } from '../../composables/queries/useAllocations';
 import { useSettingsStore } from '../../composables/state/useSettings';
+import ColumnFilter from './ColumnFilter.vue';
 
 const props = withDefaults(defineProps<{
   data: EnrichedAllocationRow[];
@@ -162,6 +168,26 @@ const sorting = ref<SortingState>(
 watch(sorting, (val) => {
   settingsStore.state.allocationSort = val.map((s) => ({ id: s.id, desc: s.desc }));
 }, { deep: true });
+
+// Column filters
+const columnFilters = ref<ColumnFiltersState>([]);
+
+const NUMBER_COLUMNS = new Set([
+  'allocatedTokens', 'activeDuration', 'apr', 'dailyRewards', 'dailyRewardsCut',
+  'pendingRewards', 'pendingRewardsCut', 'signalledTokens', 'proportion', 'stakedTokens',
+]);
+
+function getFilterType(columnId: string): 'text' | 'number' {
+  return NUMBER_COLUMNS.has(columnId) ? 'number' : 'text';
+}
+
+function numberRangeFilter(row: any, columnId: string, filterValue: [number?, number?]) {
+  const val = row.getValue(columnId) as number;
+  const [min, max] = filterValue;
+  if (min !== undefined && val < min) return false;
+  if (max !== undefined && val > max) return false;
+  return true;
+}
 
 // Row selection
 const rowSelection = ref<RowSelectionState>({});
@@ -249,6 +275,7 @@ const columns = [
     header: 'Allocated',
     size: 110,
     cell: (info) => `${info.getValue().toLocaleString()} GRT`,
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor('createdAtEpoch', {
     id: 'createdAt',
@@ -260,28 +287,29 @@ const columns = [
     id: 'activeDuration',
     header: 'Duration',
     size: 100,
-    cell: (info) => {
-      const row = info.row.original;
-      return `${info.getValue()} ep`;
-    },
+    cell: (info) => `${info.getValue()} ep`,
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor('apr', {
     id: 'apr',
     header: 'APR',
     size: 80,
     cell: (info) => formatApr(info.getValue()),
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor('dailyRewards', {
     id: 'dailyRewards',
     header: 'Est Daily',
     size: 100,
     cell: (info) => `${info.getValue().toLocaleString()} GRT`,
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor('dailyRewardsCut', {
     id: 'dailyRewardsCut',
     header: 'Daily (Cut)',
     size: 100,
     cell: (info) => `${info.getValue().toLocaleString()} GRT`,
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor((row) => weiToNumber(getPendingReward(row.id)), {
     id: 'pendingRewards',
@@ -291,6 +319,7 @@ const columns = [
       const val = info.getValue();
       return val > 0 ? `${formatGrt(val)} GRT` : '\u2014';
     },
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor((row) => weiToNumber(getPendingRewardCut(row.id)), {
     id: 'pendingRewardsCut',
@@ -300,24 +329,28 @@ const columns = [
       const val = info.getValue();
       return val > 0 ? `${formatGrt(val)} GRT` : '\u2014';
     },
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor((row) => Number(row.signalledTokens / (10n ** 18n)), {
     id: 'signalledTokens',
     header: 'Signal',
     size: 100,
     cell: (info) => `${info.getValue().toLocaleString()} GRT`,
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor('proportion', {
     id: 'proportion',
     header: 'Proportion',
     size: 90,
     cell: (info) => info.getValue().toFixed(4),
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor((row) => Number(row.stakedTokens / (10n ** 18n)), {
     id: 'stakedTokens',
     header: 'Staked',
     size: 100,
     cell: (info) => `${info.getValue().toLocaleString()} GRT`,
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor('ipfsHash', {
     id: 'deploymentId',
@@ -342,6 +375,7 @@ const table = useVueTable({
     get sorting() { return sorting.value; },
     get rowSelection() { return rowSelection.value; },
     get columnVisibility() { return columnVisibility.value; },
+    get columnFilters() { return columnFilters.value; },
   },
   onSortingChange: (updater) => {
     sorting.value = typeof updater === 'function' ? updater(sorting.value) : updater;
@@ -349,8 +383,12 @@ const table = useVueTable({
   onRowSelectionChange: (updater) => {
     rowSelection.value = typeof updater === 'function' ? updater(rowSelection.value) : updater;
   },
+  onColumnFiltersChange: (updater) => {
+    columnFilters.value = typeof updater === 'function' ? updater(columnFilters.value) : updater;
+  },
   getCoreRowModel: getCoreRowModel(),
   getSortedRowModel: getSortedRowModel(),
+  getFilteredRowModel: getFilteredRowModel(),
   getRowId: (row) => row.id,
   enableRowSelection: props.selectable,
 });
@@ -427,6 +465,7 @@ const paddingBottom = computed(() =>
   display: flex;
   align-items: center;
   gap: 0.25rem;
+  cursor: pointer;
 }
 
 .sort-indicator {

@@ -18,11 +18,10 @@
             <th
               v-for="header in headerGroup.headers"
               :key="header.id"
-              :style="{ width: `${header.getSize()}px`, cursor: header.column.getCanSort() ? 'pointer' : 'default' }"
-              @click="header.column.getToggleSortingHandler()?.($event)"
+              :style="{ width: `${header.getSize()}px` }"
               class="th-cell"
             >
-              <div class="th-content">
+              <div class="th-content" @click.stop="header.column.getToggleSortingHandler()?.($event)">
                 <FlexRender
                   :render="header.column.columnDef.header"
                   :props="header.getContext()"
@@ -31,6 +30,10 @@
                   {{ header.column.getIsSorted() === 'asc' ? '\u25B2' : '\u25BC' }}
                 </span>
               </div>
+              <ColumnFilter
+                :column="header.column"
+                :filter-type="getFilterType(header.column.id)"
+              />
             </th>
           </tr>
         </thead>
@@ -82,7 +85,7 @@
       </table>
     </div>
     <div class="table-footer">
-      <span>{{ rows.length }} subgraphs</span>
+      <span>{{ rows.length }} subgraph{{ rows.length !== 1 ? 's' : '' }}<template v-if="columnFilters.length"> (filtered)</template></span>
     </div>
   </div>
 </template>
@@ -94,9 +97,11 @@ import {
   createColumnHelper,
   getCoreRowModel,
   getSortedRowModel,
+  getFilteredRowModel,
   FlexRender,
   type SortingState,
   type RowSelectionState,
+  type ColumnFiltersState,
 } from '@tanstack/vue-table';
 import { useVirtualizer } from '@tanstack/vue-virtual';
 import Checkbox from 'primevue/checkbox';
@@ -105,6 +110,7 @@ import { formatGrt, formatApr } from '@indexer-tools/shared';
 import { format } from 'date-fns';
 import type { EnrichedSubgraphRow } from '../../composables/queries/useSubgraphs';
 import { useSettingsStore } from '../../composables/state/useSettings';
+import ColumnFilter from './ColumnFilter.vue';
 
 const props = withDefaults(defineProps<{
   data: EnrichedSubgraphRow[];
@@ -131,6 +137,26 @@ const sorting = ref<SortingState>(
 watch(sorting, (val) => {
   settingsStore.state.subgraphSort = val.map((s) => ({ id: s.id, desc: s.desc }));
 }, { deep: true });
+
+// Column filters
+const columnFilters = ref<ColumnFiltersState>([]);
+
+const NUMBER_COLUMNS = new Set([
+  'apr', 'newApr', 'maxAllo', 'dailyRewards', 'dailyRewardsCut',
+  'signalledTokens', 'proportion', 'stakedTokens',
+]);
+
+function getFilterType(columnId: string): 'text' | 'number' {
+  return NUMBER_COLUMNS.has(columnId) ? 'number' : 'text';
+}
+
+function numberRangeFilter(row: any, columnId: string, filterValue: [number?, number?]) {
+  const val = row.getValue(columnId) as number;
+  const [min, max] = filterValue;
+  if (min !== undefined && val < min) return false;
+  if (max !== undefined && val > max) return false;
+  return true;
+}
 
 // Row selection
 const rowSelection = ref<RowSelectionState>({});
@@ -183,12 +209,14 @@ const columns = [
     header: 'Current APR',
     size: 100,
     cell: (info) => formatApr(info.getValue()),
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor('newApr', {
     id: 'newApr',
     header: 'New APR',
     size: 100,
     cell: (info) => formatApr(info.getValue()),
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor('maxAllo', {
     id: 'maxAllo',
@@ -198,36 +226,42 @@ const columns = [
       const val = info.getValue();
       return val > 0 ? `${formatGrt(val)} GRT` : '\u2014';
     },
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor('dailyRewards', {
     id: 'dailyRewards',
     header: 'Est Daily Rewards',
     size: 130,
     cell: (info) => `${info.getValue().toLocaleString()} GRT`,
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor('dailyRewardsCut', {
     id: 'dailyRewardsCut',
     header: 'Daily Rewards (Cut)',
     size: 140,
     cell: (info) => `${info.getValue().toLocaleString()} GRT`,
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor((row) => Number(row.signalledTokens / (10n ** 18n)), {
     id: 'signalledTokens',
     header: 'Current Signal',
     size: 120,
     cell: (info) => `${info.getValue().toLocaleString()} GRT`,
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor('proportion', {
     id: 'proportion',
     header: 'Proportion',
     size: 100,
     cell: (info) => info.getValue().toFixed(4),
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor((row) => Number(row.stakedTokens / (10n ** 18n)), {
     id: 'stakedTokens',
     header: 'Allocations',
     size: 120,
     cell: (info) => `${info.getValue().toLocaleString()} GRT`,
+    filterFn: numberRangeFilter,
   }),
   columnHelper.accessor('ipfsHash', {
     id: 'deploymentId',
@@ -245,6 +279,7 @@ const table = useVueTable({
     get sorting() { return sorting.value; },
     get rowSelection() { return rowSelection.value; },
     get columnVisibility() { return columnVisibility.value; },
+    get columnFilters() { return columnFilters.value; },
   },
   onSortingChange: (updater) => {
     sorting.value = typeof updater === 'function' ? updater(sorting.value) : updater;
@@ -252,8 +287,12 @@ const table = useVueTable({
   onRowSelectionChange: (updater) => {
     rowSelection.value = typeof updater === 'function' ? updater(rowSelection.value) : updater;
   },
+  onColumnFiltersChange: (updater) => {
+    columnFilters.value = typeof updater === 'function' ? updater(columnFilters.value) : updater;
+  },
   getCoreRowModel: getCoreRowModel(),
   getSortedRowModel: getSortedRowModel(),
+  getFilteredRowModel: getFilteredRowModel(),
   getRowId: (row) => row.ipfsHash,
   enableRowSelection: props.selectable,
 });
@@ -323,6 +362,7 @@ const paddingBottom = computed(() =>
   display: flex;
   align-items: center;
   gap: 0.25rem;
+  cursor: pointer;
 }
 
 .sort-indicator {
