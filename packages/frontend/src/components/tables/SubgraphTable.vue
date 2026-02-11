@@ -219,20 +219,13 @@ const columnVisibility = computed(() => {
   return vis;
 });
 
+// Column order from settings
+const columnOrder = computed(() =>
+  settingsStore.state.subgraphColumns.map((c) => c.id),
+);
+
 // Define all columns
 const columns = [
-  columnHelper.accessor('displayName', {
-    id: 'name',
-    header: 'Name',
-    size: 200,
-    cell: (info) => info.getValue(),
-  }),
-  columnHelper.accessor('network', {
-    id: 'network',
-    header: 'Network',
-    size: 100,
-    cell: (info) => info.getValue() || '\u2014',
-  }),
   columnHelper.accessor('healthStatus', {
     id: 'statusChecks',
     header: 'Status',
@@ -258,6 +251,18 @@ const columns = [
         label,
       ]);
     },
+  }),
+  columnHelper.accessor('displayName', {
+    id: 'name',
+    header: 'Name',
+    size: 200,
+    cell: (info) => info.getValue(),
+  }),
+  columnHelper.accessor('network', {
+    id: 'network',
+    header: 'Network',
+    size: 100,
+    cell: (info) => info.getValue() || '\u2014',
   }),
   columnHelper.accessor('createdAt', {
     id: 'createdAt',
@@ -343,6 +348,7 @@ const table = useVueTable({
     get sorting() { return sorting.value; },
     get rowSelection() { return rowSelection.value; },
     get columnVisibility() { return columnVisibility.value; },
+    get columnOrder() { return columnOrder.value; },
     get columnFilters() { return columnFilters.value; },
   },
   onSortingChange: (updater) => {

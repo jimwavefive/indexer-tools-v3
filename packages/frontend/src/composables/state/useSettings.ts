@@ -34,7 +34,6 @@ const DEFAULT_SUBGRAPH_COLUMNS: ColumnSetting[] = [
 
 const DEFAULT_ALLOCATION_COLUMNS: ColumnSetting[] = [
   { id: 'statusChecks', title: 'Status', visible: true },
-  { id: 'status', title: 'Alloc Status', visible: false },
   { id: 'name', title: 'Name', visible: true },
   { id: 'allocatedTokens', title: 'Allocated', visible: true },
   { id: 'network', title: 'Network', visible: true },
@@ -105,7 +104,7 @@ function loadFromStorage<T>(key: string, fallback: T): T {
 
 // Bump this version when column defaults change in a way that should override stored settings
 // (e.g. reordering, renaming, changing default visibility). User columns reset to defaults on mismatch.
-const COLUMN_DEFAULTS_VERSION = 2;
+const COLUMN_DEFAULTS_VERSION = 3;
 
 /** Sync stored columns with current defaults: add missing, remove stale, preserve user order/visibility. */
 function migrateColumns(stored: ColumnSetting[], defaults: ColumnSetting[]): ColumnSetting[] {

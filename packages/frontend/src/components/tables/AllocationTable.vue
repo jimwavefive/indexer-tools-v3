@@ -177,7 +177,7 @@ const NUMBER_COLUMNS = new Set([
   'pendingRewards', 'pendingRewardsCut', 'signalledTokens', 'proportion', 'stakedTokens',
 ]);
 
-const SELECT_COLUMNS = new Set(['status', 'network', 'statusChecks']);
+const SELECT_COLUMNS = new Set(['network', 'statusChecks']);
 
 const STATUS_CHECK_OPTIONS = [
   'Closeable', 'Synced', 'Syncing', 'Failed', 'Deterministic', 'Non-deterministic',
@@ -193,9 +193,7 @@ function getFilterOptions(columnId: string): string[] | undefined {
   if (columnId === 'statusChecks') return STATUS_CHECK_OPTIONS;
   const values = new Set<string>();
   for (const row of props.data) {
-    if (columnId === 'status') {
-      values.add(row.deniedAt ? 'Denied' : 'Active');
-    } else if (columnId === 'network' && row.network) {
+    if (columnId === 'network' && row.network) {
       values.add(row.network);
     }
   }
@@ -252,6 +250,11 @@ const columnVisibility = computed(() => {
   return vis;
 });
 
+// Column order from settings
+const columnOrder = computed(() =>
+  settingsStore.state.allocationColumns.map((c) => c.id),
+);
+
 // Pending rewards helper
 function getPendingReward(alloId: string): bigint {
   return props.pendingRewards[alloId] ?? 0n;
@@ -286,12 +289,6 @@ const pendingRewardsCutTotal = computed(() => {
 
 // Define columns
 const columns = [
-  columnHelper.accessor((row) => row.deniedAt ? 'Denied' : 'Active', {
-    id: 'status',
-    header: 'Status',
-    size: 80,
-    cell: (info) => info.getValue(),
-  }),
   columnHelper.accessor('healthStatus', {
     id: 'statusChecks',
     header: 'Status',
@@ -435,6 +432,7 @@ const table = useVueTable({
     get sorting() { return sorting.value; },
     get rowSelection() { return rowSelection.value; },
     get columnVisibility() { return columnVisibility.value; },
+    get columnOrder() { return columnOrder.value; },
     get columnFilters() { return columnFilters.value; },
   },
   onSortingChange: (updater) => {
