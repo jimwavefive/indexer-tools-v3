@@ -103,6 +103,10 @@ function loadFromStorage<T>(key: string, fallback: T): T {
   }
 }
 
+// Bump this version when column defaults change in a way that should override stored settings
+// (e.g. reordering, renaming, changing default visibility). User columns reset to defaults on mismatch.
+const COLUMN_DEFAULTS_VERSION = 2;
+
 /** Sync stored columns with current defaults: add missing, remove stale, preserve user order/visibility. */
 function migrateColumns(stored: ColumnSetting[], defaults: ColumnSetting[]): ColumnSetting[] {
   const defaultMap = new Map(defaults.map((c) => [c.id, c]));
@@ -168,9 +172,16 @@ export const useSettingsStore = defineStore('settings', () => {
     Object.assign(state, persisted);
   }
 
-  // Sync stored columns with current defaults (add new columns, remove stale ones)
-  state.subgraphColumns = migrateColumns(state.subgraphColumns, DEFAULT_SUBGRAPH_COLUMNS);
-  state.allocationColumns = migrateColumns(state.allocationColumns, DEFAULT_ALLOCATION_COLUMNS);
+  // Column defaults migration: reset to defaults when version changes, otherwise just add/remove
+  const storedColumnVersion = loadFromStorage<number>('columnDefaultsVersion', 0);
+  if (storedColumnVersion < COLUMN_DEFAULTS_VERSION) {
+    state.subgraphColumns = DEFAULT_SUBGRAPH_COLUMNS.map((c) => ({ ...c }));
+    state.allocationColumns = DEFAULT_ALLOCATION_COLUMNS.map((c) => ({ ...c }));
+    localStorage.setItem('columnDefaultsVersion', JSON.stringify(COLUMN_DEFAULTS_VERSION));
+  } else {
+    state.subgraphColumns = migrateColumns(state.subgraphColumns, DEFAULT_SUBGRAPH_COLUMNS);
+    state.allocationColumns = migrateColumns(state.allocationColumns, DEFAULT_ALLOCATION_COLUMNS);
+  }
 
   // If no accounts from localStorage, use runtime config defaults
   if (!state.accounts.length && runtimeConfig.accounts.length) {
