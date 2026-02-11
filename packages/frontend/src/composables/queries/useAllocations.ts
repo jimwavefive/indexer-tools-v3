@@ -89,6 +89,7 @@ export interface EnrichedAllocationRow {
   healthColor: string;
   healthSynced: boolean | null;
   healthDeterministic: boolean | null;
+  syncPercent: number | null;
 }
 
 // ---------- Enrichment ----------
@@ -192,6 +193,7 @@ export function enrichAllocations(
       healthColor: 'default',
       healthSynced: null,
       healthDeterministic: null,
+      syncPercent: null,
     };
   }
 
@@ -313,6 +315,7 @@ export function useAllocations() {
           row.healthColor = ds.statusColor;
           row.healthSynced = ds.synced;
           row.healthDeterministic = ds.fatalError?.deterministic ?? null;
+          row.syncPercent = ds.syncPercent;
         }
       }
     }

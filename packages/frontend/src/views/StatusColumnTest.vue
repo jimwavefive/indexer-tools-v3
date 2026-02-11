@@ -1,25 +1,25 @@
 <template>
   <div class="status-test-page">
-    <h2>Status Column Visual Options</h2>
+    <h2>Status Column — Icon + Label Variations</h2>
     <p class="hint">
-      Each section below shows the same 5 deployment states rendered differently.
-      Pick the style you prefer and I'll apply it to both tables.
+      All options use Icon + Label style. Hover over any status to see the tooltip with its meaning.
+      Syncing shows an integer percentage. No status data = no icon (just a dash).
     </p>
 
-    <!-- Option A: Current 2-dot style -->
+    <!-- Option A: Icon + Label (inline percentage) -->
     <section class="option-section">
-      <h3>Option A: Two Dots + Label (current)</h3>
-      <p class="option-desc">Dot 1 = Synced, Dot 2 = Deterministic. Compact but requires tooltip knowledge.</p>
+      <h3>Option A: Icon + Label (inline percentage)</h3>
+      <p class="option-desc">Percentage shown inline after "Syncing". Clean, compact single line.</p>
       <table class="demo-table">
-        <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+        <thead><tr><th>Status</th><th>Meaning (shown in tooltip)</th></tr></thead>
         <tbody>
           <tr v-for="s in states" :key="'a-'+s.label">
             <td>
-              <span class="health-cell">
-                <span :class="['health-dot', s.syncedDot]" :title="'Synced: ' + s.syncedLabel"></span>
-                <span :class="['health-dot', s.detDot]" :title="'Deterministic: ' + s.detLabel"></span>
-                {{ s.statusLabel }}
+              <span v-if="s.icon" :class="['status-icon-cell', 'icon-' + s.color]" :title="s.meaning">
+                <i :class="s.icon"></i>
+                {{ s.displayA }}
               </span>
+              <span v-else class="no-status">&mdash;</span>
             </td>
             <td class="meaning">{{ s.meaning }}</td>
           </tr>
@@ -27,16 +27,21 @@
       </table>
     </section>
 
-    <!-- Option B: Colored pill/badge -->
+    <!-- Option B: Icon + Label (percentage in muted sub-text) -->
     <section class="option-section">
-      <h3>Option B: Colored Pill Badge</h3>
-      <p class="option-desc">Single colored badge with the status text. Clean and immediately readable.</p>
+      <h3>Option B: Icon + Label (percentage as sub-text)</h3>
+      <p class="option-desc">Percentage shown in smaller muted text. Keeps the label clean while showing progress.</p>
       <table class="demo-table">
-        <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+        <thead><tr><th>Status</th><th>Meaning (shown in tooltip)</th></tr></thead>
         <tbody>
           <tr v-for="s in states" :key="'b-'+s.label">
             <td>
-              <span :class="['status-pill', 'pill-' + s.pillColor]">{{ s.statusLabel }}</span>
+              <span v-if="s.icon" :class="['status-icon-cell', 'icon-' + s.color]" :title="s.meaning">
+                <i :class="s.icon"></i>
+                <span>{{ s.displayLabel }}</span>
+                <span v-if="s.pctText" class="pct-sub">{{ s.pctText }}</span>
+              </span>
+              <span v-else class="no-status">&mdash;</span>
             </td>
             <td class="meaning">{{ s.meaning }}</td>
           </tr>
@@ -44,19 +49,28 @@
       </table>
     </section>
 
-    <!-- Option C: Icon + Label -->
+    <!-- Option C: Icon + Label with mini progress bar -->
     <section class="option-section">
-      <h3>Option C: Icon + Label</h3>
-      <p class="option-desc">PrimeIcons icon with colored text. More expressive than dots.</p>
+      <h3>Option C: Icon + Label + Progress Bar</h3>
+      <p class="option-desc">Syncing states get a tiny inline progress bar. More visual, slightly wider column.</p>
       <table class="demo-table">
-        <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+        <thead><tr><th>Status</th><th>Meaning (shown in tooltip)</th></tr></thead>
         <tbody>
           <tr v-for="s in states" :key="'c-'+s.label">
             <td>
-              <span :class="['status-icon-cell', 'icon-' + s.pillColor]">
-                <i :class="s.icon"></i>
-                {{ s.statusLabel }}
-              </span>
+              <template v-if="s.icon">
+                <span :class="['status-icon-cell', 'icon-' + s.color]" :title="s.meaning">
+                  <i :class="s.icon"></i>
+                  <span>{{ s.displayLabel }}</span>
+                </span>
+                <span v-if="s.pct !== null" class="progress-wrap" :title="s.meaning">
+                  <span class="progress-track">
+                    <span class="progress-fill" :style="{ width: s.pct + '%' }"></span>
+                  </span>
+                  <span class="pct-label">{{ s.pct }}%</span>
+                </span>
+              </template>
+              <span v-else class="no-status">&mdash;</span>
             </td>
             <td class="meaning">{{ s.meaning }}</td>
           </tr>
@@ -64,57 +78,21 @@
       </table>
     </section>
 
-    <!-- Option D: Colored left-border bar -->
+    <!-- Option D: Icon + Label with failure sub-tag -->
     <section class="option-section">
-      <h3>Option D: Left Border Bar + Label</h3>
-      <p class="option-desc">Colored left stripe like a severity indicator. Subtle but clear.</p>
+      <h3>Option D: Icon + Label + Failure Tag</h3>
+      <p class="option-desc">Failed states get a small DET/NONDET tag. Syncing shows inline percentage. Non-failure shows "Healthy".</p>
       <table class="demo-table">
-        <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+        <thead><tr><th>Status</th><th>Meaning (shown in tooltip)</th></tr></thead>
         <tbody>
           <tr v-for="s in states" :key="'d-'+s.label">
             <td>
-              <span :class="['status-bar', 'bar-' + s.pillColor]">{{ s.statusLabel }}</span>
-            </td>
-            <td class="meaning">{{ s.meaning }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <!-- Option E: Single dot + label (simplified) -->
-    <section class="option-section">
-      <h3>Option E: Single Dot + Label</h3>
-      <p class="option-desc">One colored dot summarising overall status. Simpler than two dots.</p>
-      <table class="demo-table">
-        <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
-        <tbody>
-          <tr v-for="s in states" :key="'e-'+s.label">
-            <td>
-              <span class="health-cell">
-                <span :class="['single-dot', 'dot-' + s.pillColor]"></span>
-                {{ s.statusLabel }}
+              <span v-if="s.icon" :class="['status-icon-cell', 'icon-' + s.color]" :title="s.meaning">
+                <i :class="s.icon"></i>
+                <span>{{ s.displayD }}</span>
+                <span v-if="s.subTag" :class="['sub-tag', 'tag-' + s.color]">{{ s.subTag }}</span>
               </span>
-            </td>
-            <td class="meaning">{{ s.meaning }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <!-- Option F: Dot + deterministic sub-indicator -->
-    <section class="option-section">
-      <h3>Option F: Dot + Subscript Indicator</h3>
-      <p class="option-desc">Single dot for sync status, with a tiny "DET" or "NONDET" tag for failures.</p>
-      <table class="demo-table">
-        <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
-        <tbody>
-          <tr v-for="s in states" :key="'f-'+s.label">
-            <td>
-              <span class="health-cell">
-                <span :class="['single-dot', 'dot-' + s.pillColor]"></span>
-                <span>{{ s.shortLabel }}</span>
-                <span v-if="s.subTag" :class="['sub-tag', 'tag-' + s.subTagColor]">{{ s.subTag }}</span>
-              </span>
+              <span v-else class="no-status">&mdash;</span>
             </td>
             <td class="meaning">{{ s.meaning }}</td>
           </tr>
@@ -128,73 +106,75 @@
 const states = [
   {
     label: 'synced',
-    statusLabel: 'Synced',
-    shortLabel: 'Synced',
+    displayLabel: 'Synced',
+    displayA: 'Synced',
+    displayD: 'Synced',
     meaning: 'Healthy and fully synced to chain head',
-    syncedDot: 'health-green',
-    syncedLabel: 'Yes',
-    detDot: 'health-default',
-    detLabel: 'N/A',
-    pillColor: 'green',
+    color: 'green',
     icon: 'pi pi-check-circle',
+    pct: null as number | null,
+    pctText: null as string | null,
     subTag: null as string | null,
-    subTagColor: '',
   },
   {
     label: 'syncing',
-    statusLabel: 'Syncing',
-    shortLabel: 'Syncing',
-    meaning: 'Healthy but still catching up to chain head',
-    syncedDot: 'health-red',
-    syncedLabel: 'No',
-    detDot: 'health-default',
-    detLabel: 'N/A',
-    pillColor: 'blue',
+    displayLabel: 'Syncing',
+    displayA: 'Syncing 78%',
+    displayD: 'Syncing 78%',
+    meaning: 'Healthy but still catching up to chain head (78% synced)',
+    color: 'blue',
     icon: 'pi pi-sync',
+    pct: 78,
+    pctText: '78%',
     subTag: null,
-    subTagColor: '',
+  },
+  {
+    label: 'syncing-early',
+    displayLabel: 'Syncing',
+    displayA: 'Syncing 12%',
+    displayD: 'Syncing 12%',
+    meaning: 'Healthy but still catching up to chain head (12% synced)',
+    color: 'blue',
+    icon: 'pi pi-sync',
+    pct: 12,
+    pctText: '12%',
+    subTag: null,
   },
   {
     label: 'failed-nondet',
-    statusLabel: 'Failed NONDET',
-    shortLabel: 'Failed',
+    displayLabel: 'Failed NONDET',
+    displayA: 'Failed NONDET',
+    displayD: 'Failed',
     meaning: 'Non-deterministic failure (may self-recover, can rewind)',
-    syncedDot: 'health-red',
-    syncedLabel: 'No',
-    detDot: 'health-yellow',
-    detLabel: 'Non-deterministic',
-    pillColor: 'yellow',
+    color: 'yellow',
     icon: 'pi pi-exclamation-triangle',
+    pct: null,
+    pctText: null,
     subTag: 'NONDET',
-    subTagColor: 'yellow',
   },
   {
     label: 'failed-det',
-    statusLabel: 'Failed DET',
-    shortLabel: 'Failed',
+    displayLabel: 'Failed DET',
+    displayA: 'Failed DET',
+    displayD: 'Failed',
     meaning: 'Deterministic failure (permanent, requires new deployment version)',
-    syncedDot: 'health-red',
-    syncedLabel: 'No',
-    detDot: 'health-red',
-    detLabel: 'Deterministic',
-    pillColor: 'red',
+    color: 'red',
     icon: 'pi pi-times-circle',
+    pct: null,
+    pctText: null,
     subTag: 'DET',
-    subTagColor: 'red',
   },
   {
-    label: 'unknown',
-    statusLabel: 'Unknown',
-    shortLabel: 'Unknown',
-    meaning: 'No status data available from graph-node',
-    syncedDot: 'health-default',
-    syncedLabel: 'Unknown',
-    detDot: 'health-default',
-    detLabel: 'Unknown',
-    pillColor: 'grey',
-    icon: 'pi pi-question-circle',
+    label: 'no-data',
+    displayLabel: '',
+    displayA: '',
+    displayD: '',
+    meaning: 'No status data from graph-node — no icon shown',
+    color: 'none',
+    icon: '',
+    pct: null,
+    pctText: null,
     subTag: null,
-    subTagColor: '',
   },
 ];
 </script>
@@ -252,50 +232,14 @@ h3 { margin: 1.5rem 0 0.25rem; font-size: 1rem; }
   font-size: 0.8rem;
 }
 
-/* === Option A: Two Dots (current) === */
-.health-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.health-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.health-green { background: #4caf50; }
-.health-blue { background: #2196f3; }
-.health-red { background: #f44336; }
-.health-yellow { background: #ff9800; }
-.health-default { background: #9e9e9e; }
-
-/* === Option B: Pill Badge === */
-.status-pill {
-  display: inline-block;
-  padding: 0.15rem 0.6rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.pill-green { background: rgba(76, 175, 80, 0.15); color: #4caf50; }
-.pill-blue { background: rgba(33, 150, 243, 0.15); color: #2196f3; }
-.pill-yellow { background: rgba(255, 152, 0, 0.15); color: #ff9800; }
-.pill-red { background: rgba(244, 67, 54, 0.15); color: #f44336; }
-.pill-grey { background: rgba(158, 158, 158, 0.15); color: #9e9e9e; }
-
-/* === Option C: Icon + Label === */
+/* === Icon + Label base === */
 .status-icon-cell {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   font-size: 0.85rem;
   font-weight: 500;
+  cursor: default;
 }
 
 .status-icon-cell i { font-size: 0.9rem; }
@@ -304,39 +248,47 @@ h3 { margin: 1.5rem 0 0.25rem; font-size: 1rem; }
 .icon-blue { color: #2196f3; }
 .icon-yellow { color: #ff9800; }
 .icon-red { color: #f44336; }
-.icon-grey { color: #9e9e9e; }
 
-/* === Option D: Left Border Bar === */
-.status-bar {
-  display: inline-block;
-  padding: 0.2rem 0.5rem;
-  border-left: 3px solid;
-  font-size: 0.8rem;
-  font-weight: 500;
+/* === Option B: Muted percentage sub-text === */
+.pct-sub {
+  font-size: 0.75rem;
+  font-weight: 400;
+  opacity: 0.65;
+  margin-left: 0.1rem;
 }
 
-.bar-green { border-color: #4caf50; color: #4caf50; }
-.bar-blue { border-color: #2196f3; color: #2196f3; }
-.bar-yellow { border-color: #ff9800; color: #ff9800; }
-.bar-red { border-color: #f44336; color: #f44336; }
-.bar-grey { border-color: #9e9e9e; color: #9e9e9e; }
-
-/* === Option E: Single Dot === */
-.single-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
+/* === Option C: Mini progress bar === */
+.progress-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: 0.4rem;
 }
 
-.dot-green { background: #4caf50; }
-.dot-blue { background: #2196f3; }
-.dot-yellow { background: #ff9800; }
-.dot-red { background: #f44336; }
-.dot-grey { background: #9e9e9e; }
+.progress-track {
+  display: inline-block;
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
 
-/* === Option F: Dot + Sub-tag === */
+.progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: #2196f3;
+  transition: width 0.3s ease;
+}
+
+.pct-label {
+  font-size: 0.7rem;
+  color: #2196f3;
+  font-weight: 600;
+}
+
+/* === Option D: Failure sub-tag === */
 .sub-tag {
   display: inline-block;
   padding: 0.05rem 0.3rem;
@@ -349,4 +301,10 @@ h3 { margin: 1.5rem 0 0.25rem; font-size: 1rem; }
 
 .tag-yellow { background: rgba(255, 152, 0, 0.15); color: #ff9800; }
 .tag-red { background: rgba(244, 67, 54, 0.15); color: #f44336; }
+
+/* === No status data === */
+.no-status {
+  color: var(--p-text-muted-color);
+  font-size: 0.85rem;
+}
 </style>

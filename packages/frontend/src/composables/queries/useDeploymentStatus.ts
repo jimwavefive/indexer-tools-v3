@@ -34,6 +34,7 @@ export interface EnrichedDeploymentStatus extends DeploymentStatus {
   blocksBehindChainhead: number;
   statusLabel: string;
   statusColor: string;
+  syncPercent: number | null;
 }
 
 function enrichStatus(status: DeploymentStatus): EnrichedDeploymentStatus {
@@ -62,7 +63,13 @@ function enrichStatus(status: DeploymentStatus): EnrichedDeploymentStatus {
     statusColor = 'default';
   }
 
-  return { ...status, blocksBehindChainhead: blocksBehind, statusLabel, statusColor };
+  // Sync percentage: latestBlock / chainHeadBlock * 100 (null if no block data)
+  let syncPercent: number | null = null;
+  if (chainHead > 0 && latestBlock > 0) {
+    syncPercent = Math.min(100, Math.floor((latestBlock / chainHead) * 100));
+  }
+
+  return { ...status, blocksBehindChainhead: blocksBehind, statusLabel, statusColor, syncPercent };
 }
 
 async function fetchStatuses(url: string): Promise<EnrichedDeploymentStatus[]> {

@@ -287,32 +287,59 @@ const pendingRewardsCutTotal = computed(() => {
   return sum;
 });
 
+// Status cell renderer — Option D: Icon + Label + Failure Tag + Tooltip
+const STATUS_CONFIG: Record<string, { icon: string; color: string; tooltip: string }> = {
+  'Synced': { icon: 'pi pi-check-circle', color: 'green', tooltip: 'Healthy and fully synced to chain head' },
+  'Syncing': { icon: 'pi pi-sync', color: 'blue', tooltip: 'Healthy but still catching up to chain head' },
+  'Failed DET': { icon: 'pi pi-times-circle', color: 'red', tooltip: 'Deterministic failure (permanent, requires new deployment version)' },
+  'Failed NONDET': { icon: 'pi pi-exclamation-triangle', color: 'yellow', tooltip: 'Non-deterministic failure (may self-recover, can rewind)' },
+};
+
+function renderStatusCell(
+  status: string,
+  _color: string,
+  deterministic: boolean | null,
+  syncPercent: number | null,
+) {
+  if (!status) return h('span', { class: 'no-status' }, '\u2014');
+
+  const cfg = STATUS_CONFIG[status];
+  if (!cfg) return h('span', { class: 'no-status' }, '\u2014');
+
+  const children: any[] = [
+    h('i', { class: cfg.icon }),
+  ];
+
+  // Label: "Syncing XX%" for syncing, "Failed" + tag for failures, plain label otherwise
+  if (status === 'Syncing' && syncPercent !== null) {
+    children.push(h('span', {}, `Syncing ${syncPercent}%`));
+  } else if (status === 'Failed DET' || status === 'Failed NONDET') {
+    children.push(h('span', {}, 'Failed'));
+    const tag = deterministic === true ? 'DET' : 'NONDET';
+    const tagColor = deterministic === true ? 'red' : 'yellow';
+    children.push(h('span', { class: `sub-tag tag-${tagColor}` }, tag));
+  } else {
+    children.push(h('span', {}, status));
+  }
+
+  let tooltip = cfg.tooltip;
+  if (status === 'Syncing' && syncPercent !== null) {
+    tooltip += ` (${syncPercent}% synced)`;
+  }
+
+  return h('span', { class: `status-icon-cell icon-${cfg.color}`, title: tooltip }, children);
+}
+
 // Define columns
 const columns = [
   columnHelper.accessor('healthStatus', {
     id: 'statusChecks',
     header: 'Status',
-    size: 140,
+    size: 150,
     filterFn: statusCheckFilter,
     cell: (info) => {
       const row = info.row.original;
-      const label = row.healthStatus || '\u2014';
-
-      // Dot 1: Synced
-      const syncedColor = row.healthSynced === true
-        ? 'health-green'
-        : row.healthSynced === false ? 'health-red' : 'health-default';
-
-      // Dot 2: Deterministic failure
-      const detColor = row.healthDeterministic === true
-        ? 'health-red'
-        : row.healthDeterministic === false ? 'health-yellow' : 'health-default';
-
-      return h('span', { class: 'health-cell' }, [
-        h('span', { class: `health-dot ${syncedColor}`, title: 'Synced' }),
-        h('span', { class: `health-dot ${detColor}`, title: 'Deterministic' }),
-        label,
-      ]);
+      return renderStatusCell(row.healthStatus, row.healthColor, row.healthDeterministic, row.syncPercent);
     },
   }),
   columnHelper.accessor('displayName', {
@@ -566,24 +593,38 @@ const paddingBottom = computed(() =>
   padding: 0;
 }
 
-/* Health dot indicators */
-:deep(.health-cell) {
+/* Status icon + label indicators */
+:deep(.status-icon-cell) {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: default;
 }
 
-:deep(.health-dot) {
+:deep(.status-icon-cell i) { font-size: 0.9rem; }
+
+:deep(.icon-green) { color: #4caf50; }
+:deep(.icon-blue) { color: #2196f3; }
+:deep(.icon-yellow) { color: #ff9800; }
+:deep(.icon-red) { color: #f44336; }
+
+:deep(.no-status) {
+  color: var(--p-text-muted-color);
+  font-size: 0.85rem;
+}
+
+:deep(.sub-tag) {
   display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
 }
 
-:deep(.health-green) { background: #4caf50; }
-:deep(.health-blue) { background: #2196f3; }
-:deep(.health-red) { background: #f44336; }
-:deep(.health-yellow) { background: #ff9800; }
-:deep(.health-default) { background: #9e9e9e; }
+:deep(.tag-yellow) { background: rgba(255, 152, 0, 0.15); color: #ff9800; }
+:deep(.tag-red) { background: rgba(244, 67, 54, 0.15); color: #f44336; }
 </style>

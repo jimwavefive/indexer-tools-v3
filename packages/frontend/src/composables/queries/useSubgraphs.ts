@@ -73,6 +73,7 @@ export interface EnrichedSubgraphRow {
   healthColor: string;
   healthSynced: boolean | null;
   healthDeterministic: boolean | null;
+  syncPercent: number | null;
 }
 
 interface SubgraphsResponse {
@@ -172,6 +173,7 @@ export function enrichSubgraphs(
       healthColor: 'default',
       healthSynced: null,
       healthDeterministic: null,
+      syncPercent: null,
     };
   }
 
@@ -354,6 +356,7 @@ export function useSubgraphs(indexerChains?: Ref<string[]>, allocatedDeployments
           row.healthColor = ds.statusColor;
           row.healthSynced = ds.synced;
           row.healthDeterministic = ds.fatalError?.deterministic ?? null;
+          row.syncPercent = ds.syncPercent;
         }
       }
     }
