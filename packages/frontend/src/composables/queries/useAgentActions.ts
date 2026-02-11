@@ -34,6 +34,12 @@ export interface ActionInput {
   amount?: string;
   poi?: string;
   force?: boolean;
+  status: string;
+  source: string;
+  reason: string;
+  priority: number;
+  protocolNetwork: string;
+  isLegacy: boolean;
 }
 
 export function useAgentActions() {

@@ -396,10 +396,22 @@ const actionsQueueCommands = computed(() => {
 });
 
 // Structured action inputs for agent API
+const isLegacyNetwork = computed(() => !(networkData.value?.maxThawingPeriod && networkData.value.maxThawingPeriod > 0));
+
 const actionInputs = computed<ActionInput[]>(() => {
   const inputs: ActionInput[] = [];
   const skip = new Set<string>();
   const selectedHashes = new Set(wizardStore.selectedSubgraphHashes);
+  const chainId = chainStore.activeChainId;
+
+  // Common required fields for indexer-agent
+  const common = {
+    status: 'queued' as const,
+    source: 'Indexer Tools',
+    reason: 'Allocation Wizard',
+    priority: 0,
+    protocolNetwork: chainId,
+  };
 
   // Process closing allocations
   for (const allo of closingAllocations.value) {
@@ -420,6 +432,8 @@ const actionInputs = computed<ActionInput[]>(() => {
         amount: String(newAmount),
         poi: resolvedPoi,
         force,
+        isLegacy: allo.isLegacy,
+        ...common,
       });
       skip.add(hash);
     } else {
@@ -430,6 +444,8 @@ const actionInputs = computed<ActionInput[]>(() => {
         allocationID: allo.id,
         poi: resolvedPoi,
         force,
+        isLegacy: allo.isLegacy,
+        ...common,
       });
     }
   }
@@ -442,6 +458,8 @@ const actionInputs = computed<ActionInput[]>(() => {
         type: 'allocate',
         deploymentID: hash,
         amount: String(amount),
+        isLegacy: isLegacyNetwork.value,
+        ...common,
       });
     }
   }
