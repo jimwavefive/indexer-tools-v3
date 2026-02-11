@@ -59,6 +59,11 @@ const routes = [
         name: 'Status Dashboard',
         component: () => import('../views/DeploymentStatusDashboard.vue'),
       },
+      {
+        path: 'status-test',
+        name: 'Status Column Test',
+        component: () => import('../views/StatusColumnTest.vue'),
+      },
     ],
   },
 ];

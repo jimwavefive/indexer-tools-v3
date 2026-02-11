@@ -17,7 +17,7 @@ export interface SortSetting {
 
 // Default column configurations — IDs correspond to TanStack Table column IDs
 const DEFAULT_SUBGRAPH_COLUMNS: ColumnSetting[] = [
-  { id: 'statusChecks', title: 'Health', visible: true },
+  { id: 'statusChecks', title: 'Status', visible: true },
   { id: 'name', title: 'Name', visible: true },
   { id: 'network', title: 'Network', visible: true },
   { id: 'createdAt', title: 'Created', visible: true },
@@ -33,8 +33,8 @@ const DEFAULT_SUBGRAPH_COLUMNS: ColumnSetting[] = [
 ];
 
 const DEFAULT_ALLOCATION_COLUMNS: ColumnSetting[] = [
-  { id: 'status', title: 'Status', visible: true },
-  { id: 'statusChecks', title: 'Health', visible: true },
+  { id: 'statusChecks', title: 'Status', visible: true },
+  { id: 'status', title: 'Alloc Status', visible: false },
   { id: 'name', title: 'Name', visible: true },
   { id: 'allocatedTokens', title: 'Allocated', visible: true },
   { id: 'network', title: 'Network', visible: true },

@@ -235,7 +235,7 @@ const columns = [
   }),
   columnHelper.accessor('healthStatus', {
     id: 'statusChecks',
-    header: 'Health',
+    header: 'Status',
     size: 140,
     filterFn: statusCheckFilter,
     cell: (info) => {
