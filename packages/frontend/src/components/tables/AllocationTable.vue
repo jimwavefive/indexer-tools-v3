@@ -220,6 +220,18 @@ const pendingRewardsCutTotal = computed(() => {
 
 // Define columns
 const columns = [
+  columnHelper.accessor((row) => row.deniedAt ? 'Denied' : 'Active', {
+    id: 'status',
+    header: 'Status',
+    size: 80,
+    cell: (info) => info.getValue(),
+  }),
+  columnHelper.accessor('healthStatus', {
+    id: 'statusChecks',
+    header: 'Health',
+    size: 120,
+    cell: (info) => info.getValue() || '\u2014',
+  }),
   columnHelper.accessor('displayName', {
     id: 'name',
     header: 'Name',

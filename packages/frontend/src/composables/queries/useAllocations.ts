@@ -5,6 +5,7 @@ import { useSettingsStore } from '../state/useSettings';
 import { useGraphClient } from '../util/useGraphClient';
 import { useNetwork } from './useNetwork';
 import { useAccount } from './useAccount';
+import { useDeploymentStatus } from './useDeploymentStatus';
 import {
   GET_ALLOCATIONS,
   parseBigInt,
@@ -84,6 +85,8 @@ export interface EnrichedAllocationRow {
   queryFeesAmount: bigint;
   subgraphId: string;
   currentVersionHash: string | null;
+  healthStatus: string;
+  healthColor: string;
 }
 
 // ---------- Enrichment ----------
@@ -183,6 +186,8 @@ export function enrichAllocations(
       queryFeesAmount: parseBigInt(dep.queryFeesAmount),
       subgraphId,
       currentVersionHash,
+      healthStatus: '',
+      healthColor: 'default',
     };
   }
 
@@ -266,6 +271,7 @@ export function useAllocations() {
   const { networkClient } = useGraphClient();
   const { data: networkData } = useNetwork();
   const { data: accountData } = useAccount();
+  const deploymentStatusQuery = useDeploymentStatus();
 
   const activeAccount = computed(() => settingsStore.getActiveAccount());
 
@@ -283,14 +289,29 @@ export function useAllocations() {
     staleTime: 60_000,
   });
 
-  // Enriched allocations
+  // Enriched allocations (with deployment health status joined)
   const enriched = computed(() => {
     if (!query.data.value) return [];
-    return enrichAllocations(
+    const rows = enrichAllocations(
       query.data.value,
       networkData.value,
       accountData.value?.rewardCut ?? 0,
     );
+
+    // Join deployment health status
+    const statuses = deploymentStatusQuery.data.value;
+    if (statuses && statuses.length > 0) {
+      const statusMap = new Map(statuses.map((s) => [s.subgraph, s]));
+      for (const row of rows) {
+        const ds = statusMap.get(row.ipfsHash);
+        if (ds) {
+          row.healthStatus = ds.statusLabel;
+          row.healthColor = ds.statusColor;
+        }
+      }
+    }
+
+    return rows;
   });
 
   // Available networks for filter dropdown
